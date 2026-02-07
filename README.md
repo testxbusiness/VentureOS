@@ -1,56 +1,78 @@
-# AI Business OS (Aligned to updated BusinessPRD)
+# VentureOS
 
-Implementazione iniziale della tua AI company per "Emotional Pregnancy" (no medical), con CEO-in-the-loop per approvazioni e pagamenti.
+VentureOS è un sistema operativo agentico per costruire e far crescere prodotti digitali con approvazione umana sui passaggi critici.
 
-## Stato attuale (allineato al nuovo PRD)
+In questa repository trovi la prima implementazione di una AI company orientata a:
+- progettazione e iterazione di mini webapp,
+- content factory per social,
+- governance con approvazioni CEO,
+- controllo finanziario con ledger e PnL.
 
-- Platform OS Convex con workflow `Propose -> Approve -> Execute`.
-- Guardrail no-medical + audit log append-only.
-- Purchase requests con pagamento manuale obbligatorio.
-- Social queue con publish manuale.
-- Finance foundation:
-  - `ledgerEntries` + `budgets`
-  - overview PnL/burn/runway
-  - write automatico da purchase request pagata
-  - ingest Stripe events verso ledger.
-- Product Expansion foundation:
-  - collections dedicate (`productIdeas`, `marketResearch`, `emotionInsights`, `productProposals`, `productArtifacts`, `ipChecks`, `listingQueue`)
-  - queue listing manuale approvabile.
-- LLM gateway unificato (MVP deterministic fallback) con validazione output minima e compliance check.
-- CEO Console base con route:
-  - `/` dashboard
-  - `/proposals`
-  - `/finance`
+## Core Principles
 
-## File principali
+- Human-in-the-loop: le azioni sensibili passano da approvazione.
+- No automatic spend: ogni spesa è richiesta, pagata manualmente e confermata.
+- Compliance-first: guardrail applicati ai contenuti prima dell’esecuzione.
+- Auditability: eventi e decisioni tracciati in audit log append-only.
 
-- Convex schema: `/Users/famigliapoliti/Desktop/AI Business/convex/schema.ts`
-- Proposals/approval flow: `/Users/famigliapoliti/Desktop/AI Business/convex/proposals.ts`
-- Purchase flow: `/Users/famigliapoliti/Desktop/AI Business/convex/purchaseRequests.ts`
-- Finance: `/Users/famigliapoliti/Desktop/AI Business/convex/finance.ts`
-- Stripe ingest: `/Users/famigliapoliti/Desktop/AI Business/convex/stripe.ts`
-- Product expansion: `/Users/famigliapoliti/Desktop/AI Business/convex/productExpansion.ts`
-- LLM gateway: `/Users/famigliapoliti/Desktop/AI Business/convex/llmGateway.ts`
-- Orchestrator: `/Users/famigliapoliti/Desktop/AI Business/convex/orchestrator.ts`
-- Cron jobs: `/Users/famigliapoliti/Desktop/AI Business/convex/crons.ts`
-- CEO home: `/Users/famigliapoliti/Desktop/AI Business/app/page.tsx`
-- CEO finance: `/Users/famigliapoliti/Desktop/AI Business/app/finance/page.tsx`
+## What’s Implemented
 
-## Run locale
+- Workflow `Propose -> Approve -> Execute` per iniziative prodotto, contenuto e operative.
+- Guardrail layer con controlli no-medical.
+- Purchase requests con stato approvazione e conferma pagamento manuale.
+- Social queue con approvazione e publish manuale.
+- Agent runtime su Convex con orchestrazione daily/weekly.
+- LLM gateway unificato (MVP) con validazione output minima.
+- Finance module:
+  - `ledgerEntries` (revenue, expense, fee, refund)
+  - `budgets`
+  - overview PnL / burn / runway
+  - registrazione spese da purchase request pagata
+  - ingest eventi Stripe verso ledger
+- Product expansion foundation con idea pipeline e listing queue.
+- CEO Console (Next.js) con dashboard, proposals inbox e finance page.
+
+## Tech Stack
+
+- Next.js
+- Convex
+- React
+- TypeScript
+- Stripe (integration foundation)
+
+## Project Structure
+
+- `convex/schema.ts` — schema e indici principali
+- `convex/proposals.ts` — flusso propose/approve/execute
+- `convex/purchaseRequests.ts` — richieste acquisto e pagamento manuale
+- `convex/finance.ts` — ledger, budget, PnL overview
+- `convex/stripe.ts` — ingest eventi Stripe nel ledger
+- `convex/orchestrator.ts` — cicli autonomi daily/weekly
+- `convex/llmGateway.ts` — gateway LLM centralizzato (MVP)
+- `convex/productExpansion.ts` — pipeline prodotti adiacenti
+- `convex/crons.ts` — job schedulati
+- `app/` — CEO Console (dashboard, proposals, finance)
+
+## Quick Start
 
 ```bash
-cd '/Users/famigliapoliti/Desktop/AI Business'
 npm install
 cp .env.example .env.local
 npm run convex:dev
-# in altro terminale
+# in another terminal
 npm run dev
 ```
 
-## Gap residui verso DoD MVP
+Open:
+- `http://localhost:3000/`
+- `http://localhost:3000/proposals`
+- `http://localhost:3000/finance`
 
-1. Collegare Clerk (RBAC CEO-only reale) su tutte le route console.
-2. Sostituire UI mock con query/mutation Convex reali in `/proposals` e `/finance`.
-3. Implementare webhook Stripe completo (signature verification + mapping eventi reali).
-4. Kick Counter app live con funnel tracciato end-to-end.
-5. Pipeline video (render_jobs -> GitHub Actions -> artifact callback).
+## Current Scope
+
+La base è pronta per evolvere verso:
+- auth/rbac CEO-only con Clerk,
+- webhook Stripe completo con signature verification,
+- UI connesse a query/mutation Convex reali,
+- pipeline video rendering su GitHub Actions,
+- mini webapp production-ready con funnel completo.
