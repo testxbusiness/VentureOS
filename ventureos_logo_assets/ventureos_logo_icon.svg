@@ -1,8 +1,0 @@
-<svg xmlns="http://www.w3.org/2000/svg" viewBox="0 0 256 256" width="256" height="256" aria-label="VentureOS logo">
-  <g fill="none" stroke="currentColor" stroke-linecap="round" stroke-linejoin="round">
-    <path d="M206 140a82 82 0 1 1-23-58" stroke-width="14"/>
-    <path d="M192 56 L222 58 L208 84" stroke-width="14"/>
-    <path d="M94 108 L128 170 L162 108" stroke-width="16"/>
-    <circle cx="128" cy="170" r="6" fill="currentColor" stroke="none"/>
-  </g>
-</svg>
