@@ -1,5 +1,9 @@
 # VentureOS
 
+<p align="left">
+  <img src="ventureos_logo_assets/ventureos_logo_icon_dark.svg" alt="VentureOS logo" width="72" />
+</p>
+
 VentureOS è un sistema operativo agentico per costruire e far crescere prodotti digitali con approvazione umana sui passaggi critici.
 
 In questa repository trovi la prima implementazione di una AI company orientata a:
@@ -39,6 +43,12 @@ In questa repository trovi la prima implementazione di una AI company orientata 
 - React
 - TypeScript
 - Stripe (integration foundation)
+
+## Brand Assets
+
+- Logo assets: `ventureos_logo_assets/`
+- Primary icon (SVG): `ventureos_logo_assets/ventureos_logo_icon.svg`
+- Dark variant used in this README: `ventureos_logo_assets/ventureos_logo_icon_dark.svg`
 
 ## Project Structure
 
