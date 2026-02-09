@@ -5,7 +5,7 @@ import { FormEvent, useMemo, useState } from "react";
 import { useParams } from "next/navigation";
 import { useMutation, useQuery } from "convex/react";
 import { api } from "@/convex/_generated/api";
-import type { Id } from "@/convex/_generated/dataModel";
+import type { Doc, Id } from "@/convex/_generated/dataModel";
 
 const CHECKPOINTS = ["NICHE_BRIEF", "TRIGGER_MAP", "SHORTLIST", "PNL_RISK_GO_NO_GO", "SOCIAL_PACK_FINAL"] as const;
 
@@ -14,9 +14,11 @@ export default function RunDetailPage() {
   const runId = params.id as Id<"ventureRuns">;
 
   const detail = useQuery(api.runs.getRunDetail, { runId });
-  const audit = useQuery(api.audit.listRunAudit, { runId });
+  const audit = useQuery(api.audit.listRunAudit, { runId }) as Doc<"ventureAuditLog">[] | undefined;
 
   const rerunStep = useMutation(api.runs.rerunStep);
+  const runA1NicheIntake = useMutation(api.agents.runA1NicheIntake);
+  const runA2MarketSignals = useMutation(api.agents.runA2MarketSignals);
   const requestApproval = useMutation(api.approvals.requestApproval);
   const completeRun = useMutation(api.steps.completeRun);
 
@@ -24,12 +26,14 @@ export default function RunDetailPage() {
   const [stepKey, setStepKey] = useState("");
   const [requestPayload, setRequestPayload] = useState("{}");
   const [actionError, setActionError] = useState<string | null>(null);
+  const [actionMessage, setActionMessage] = useState<string | null>(null);
 
-  const steps = useMemo(() => detail?.steps ?? [], [detail]);
+  const steps = useMemo(() => (detail?.steps ?? []) as Doc<"ventureRunSteps">[], [detail]);
 
   async function onRequestApproval(event: FormEvent<HTMLFormElement>) {
     event.preventDefault();
     setActionError(null);
+    setActionMessage(null);
     try {
       const payload = requestPayload.trim() ? JSON.parse(requestPayload) : undefined;
       await requestApproval({
@@ -39,6 +43,7 @@ export default function RunDetailPage() {
         payload,
         requestedBy: "orchestrator"
       });
+      setActionMessage("Approval request created.");
     } catch (e) {
       setActionError(e instanceof Error ? e.message : "Approval request failed");
     }
@@ -110,6 +115,36 @@ export default function RunDetailPage() {
       <section className="panel">
         <h2>Run actions</h2>
         <div style={{ display: "flex", gap: 10, flexWrap: "wrap" }}>
+          <button
+            className="button"
+            onClick={async () => {
+              setActionError(null);
+              setActionMessage(null);
+              try {
+                await runA1NicheIntake({ runId, actor: "ceo" });
+                setActionMessage("A1 completed and checkpoint requested.");
+              } catch (e) {
+                setActionError(e instanceof Error ? e.message : "A1 failed");
+              }
+            }}
+          >
+            Run A1 Niche Intake
+          </button>
+          <button
+            className="button"
+            onClick={async () => {
+              setActionError(null);
+              setActionMessage(null);
+              try {
+                await runA2MarketSignals({ runId, actor: "ceo" });
+                setActionMessage("A2 Market Signals completed.");
+              } catch (e) {
+                setActionError(e instanceof Error ? e.message : "A2 failed");
+              }
+            }}
+          >
+            Run A2 Market Signals
+          </button>
           <button className="button" onClick={() => completeRun({ runId, status: "completed", actor: "ceo" })}>
             Mark Completed
           </button>
@@ -120,6 +155,8 @@ export default function RunDetailPage() {
             Mark Failed
           </button>
         </div>
+        {actionMessage ? <div style={{ marginTop: 10, color: "#0f766e" }}>{actionMessage}</div> : null}
+        {actionError ? <div style={{ marginTop: 10, color: "#b42318" }}>{actionError}</div> : null}
       </section>
 
       <section className="panel">

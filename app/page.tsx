@@ -4,9 +4,10 @@ import Link from "next/link";
 import { useMemo } from "react";
 import { useQuery } from "convex/react";
 import { api } from "@/convex/_generated/api";
+import type { Doc } from "@/convex/_generated/dataModel";
 
 export default function HomePage() {
-  const runs = useQuery(api.runs.listRuns, {});
+  const runs = useQuery(api.runs.listRuns, {}) as Doc<"ventureRuns">[] | undefined;
   const approvals = useQuery(api.approvals.listApprovalQueue, {});
 
   const stats = useMemo(() => {

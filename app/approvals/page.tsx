@@ -3,6 +3,7 @@
 import Link from "next/link";
 import { useMutation, useQuery } from "convex/react";
 import { api } from "@/convex/_generated/api";
+import type { Doc } from "@/convex/_generated/dataModel";
 
 function ageFromTimestamp(ts: number) {
   const diffMs = Date.now() - ts;
@@ -18,6 +19,7 @@ function ageFromTimestamp(ts: number) {
 export default function ApprovalQueuePage() {
   const queue = useQuery(api.approvals.listApprovalQueue, {});
   const decideApproval = useMutation(api.approvals.decideApproval);
+  const items = (queue ?? []) as Doc<"ventureApprovals">[];
 
   return (
     <main className="container">
@@ -30,7 +32,7 @@ export default function ApprovalQueuePage() {
       {queue === undefined ? <p>Loading approvals...</p> : null}
 
       <section className="list">
-        {(queue ?? []).map((item) => (
+        {items.map((item) => (
           <article className="item" key={item._id}>
             <strong>{item.checkpointType}</strong>
             <div>run: {item.runId}</div>

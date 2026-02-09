@@ -4,10 +4,10 @@ import Link from "next/link";
 import { FormEvent, useMemo, useState } from "react";
 import { useMutation, useQuery } from "convex/react";
 import { api } from "@/convex/_generated/api";
-import type { Id } from "@/convex/_generated/dataModel";
+import type { Doc, Id } from "@/convex/_generated/dataModel";
 
 export default function RunsPage() {
-  const runs = useQuery(api.runs.listRuns, {});
+  const runs = useQuery(api.runs.listRuns, {}) as Doc<"ventureRuns">[] | undefined;
   const createRun = useMutation(api.runs.createRun);
 
   const [niche, setNiche] = useState("");
