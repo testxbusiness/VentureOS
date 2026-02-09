@@ -1074,3 +1074,190 @@ export const runA7PnlKpi = mutation({
     return { stepId: step._id, artifactId, selectedIdeaKey: selected.ideaKey };
   }
 });
+
+export const runA8RiskGoNoGo = mutation({
+  args: {
+    runId: v.id("ventureRuns"),
+    actor: v.string()
+  },
+  handler: async (ctx, args) => {
+    const run = await ctx.db.get(args.runId);
+    if (!run) throw new Error("Run not found");
+
+    const a7Step = await ctx.db
+      .query("ventureRunSteps")
+      .withIndex("by_run_step", (q) => q.eq("runId", args.runId).eq("stepKey", "A7_PNL_KPI"))
+      .first();
+    if (!a7Step || a7Step.status !== "completed") {
+      throw new Error("A7 PnL/KPI must be completed before running A8");
+    }
+
+    const step = await ctx.db
+      .query("ventureRunSteps")
+      .withIndex("by_run_step", (q) => q.eq("runId", args.runId).eq("stepKey", "A8_RISK_COMPLIANCE"))
+      .first();
+    if (!step) throw new Error("A8 step not found");
+    if (step.status === "needs_approval") throw new Error("A8 already waiting approval");
+
+    const existingRisks = await ctx.db
+      .query("ventureRiskFlags")
+      .withIndex("by_run", (q) => q.eq("runId", args.runId))
+      .collect();
+    for (const risk of existingRisks) {
+      await ctx.db.delete(risk._id);
+    }
+
+    const shortlist = await ctx.db
+      .query("ventureScores")
+      .withIndex("by_run", (q) => q.eq("runId", args.runId))
+      .collect();
+    const bestScore = [...shortlist].sort((a, b) => b.overallScore - a.overallScore)[0];
+
+    const riskSeeds: Array<{
+      scope: "idea" | "social" | "platform" | "legal" | "privacy" | "claims";
+      severity: "low" | "medium" | "high" | "hard_stop";
+      title: string;
+      description: string;
+      mitigation: string;
+    }> = [
+      {
+        scope: "idea",
+        severity: "medium",
+        title: "Value proposition ambiguity",
+        description: "La proposta top potrebbe non essere immediatamente comprensibile nel primo touchpoint.",
+        mitigation: "Testare 2 varianti di positioning con metriche activation_rate_7d."
+      },
+      {
+        scope: "platform",
+        severity: "high",
+        title: "Channel dependency",
+        description: "Acquisizione iniziale concentrata su pochi canali con rischio volatilita.",
+        mitigation: "Diversificare su almeno 2 canali entro i primi 14 giorni."
+      },
+      {
+        scope: "claims",
+        severity: "medium",
+        title: "Overclaim risk",
+        description: "Messaging aggressivo puo generare aspettative non sostenibili.",
+        mitigation: "Validare copy con checklist anti-claim prima della pubblicazione."
+      }
+    ];
+
+    const nicheLower = run.niche.toLowerCase();
+    const medicalTerms = ["medical", "medico", "diagnosi", "terapia", "cure", "farmaco"];
+    const hasHardStopMedical = medicalTerms.some((term) => nicheLower.includes(term));
+    if (hasHardStopMedical) {
+      riskSeeds.push({
+        scope: "legal",
+        severity: "hard_stop",
+        title: "Medical-claim hard stop",
+        description: "Niche con potenziale claim medicale non compatibile con guardrail correnti.",
+        mitigation: "Riposizionare l'offerta su ambito non medicale e rieseguire A8."
+      });
+    }
+
+    const now = Date.now();
+    const createdRiskIds: string[] = [];
+    for (const seed of riskSeeds) {
+      const riskId = await ctx.db.insert("ventureRiskFlags", {
+        runId: run._id,
+        scope: seed.scope,
+        severity: seed.severity,
+        title: seed.title,
+        description: seed.description,
+        mitigation: seed.mitigation,
+        status: "open",
+        createdAt: now,
+        updatedAt: now
+      });
+      createdRiskIds.push(String(riskId));
+    }
+
+    const hardStopCount = riskSeeds.filter((risk) => risk.severity === "hard_stop").length;
+    const output = {
+      generatedAt: nowIso(),
+      principles: [
+        "Ogni rischio deve avere severita e mitigazione esplicita.",
+        "I rischi hard-stop impediscono approvazione GO fino a mitigazione.",
+        "La decisione GO/NO-GO combina score, PnL-lite e risk memo."
+      ],
+      deliverable: {
+        topIdea: bestScore
+          ? { ideaKey: bestScore.ideaKey, score: bestScore.overallScore, unknowns: bestScore.unknowns }
+          : null,
+        riskSummary: {
+          total: riskSeeds.length,
+          hardStop: hardStopCount,
+          high: riskSeeds.filter((risk) => risk.severity === "high").length,
+          medium: riskSeeds.filter((risk) => risk.severity === "medium").length,
+          low: riskSeeds.filter((risk) => risk.severity === "low").length
+        },
+        recommendation: hardStopCount > 0 ? "NO_GO_UNTIL_MITIGATED" : "GO_WITH_GUARDRAILS",
+        checklist: [
+          "Risk memo con severita e mitigazioni",
+          "Hard-stop evidenziati",
+          "Raccomandazione GO/NO-GO prodotta",
+          "Checkpoint decisionale pronto in approval queue"
+        ]
+      }
+    };
+
+    const evidenceRefs = [...new Set([...(a7Step.evidenceRefs ?? []), ...createdRiskIds.map((id) => `risk:${id}`)])];
+
+    await ctx.db.patch(step._id, {
+      status: "needs_approval",
+      output,
+      evidenceRefs,
+      startedAt: step.startedAt ?? now,
+      finishedAt: now,
+      updatedAt: now
+    });
+
+    await ctx.db.patch(run._id, {
+      status: "awaiting_approval",
+      currentStep: "A8_RISK_COMPLIANCE",
+      updatedAt: now
+    });
+
+    const artifactId = await ctx.db.insert("ventureArtifacts", {
+      runId: run._id,
+      stepKey: "A8_RISK_COMPLIANCE",
+      artifactType: "risk_memo",
+      format: "json",
+      title: "Risk Memo & GO/NO-GO (A8)",
+      content: output,
+      evidenceRefs,
+      version: 1,
+      createdAt: now
+    });
+
+    const approvalId = await ctx.db.insert("ventureApprovals", {
+      runId: run._id,
+      stepId: step._id,
+      checkpointType: "PNL_RISK_GO_NO_GO",
+      status: "pending",
+      payload: {
+        summary: "GO/NO-GO decision based on score, PnL-lite and risk memo.",
+        artifactId,
+        hardStopCount
+      },
+      requestedBy: args.actor,
+      reviewedBy: undefined,
+      decisionNote: undefined,
+      createdAt: now,
+      updatedAt: now
+    });
+
+    await ctx.db.insert("ventureAuditLog", {
+      runId: run._id,
+      entityType: "approval",
+      entityId: approvalId,
+      action: "APPROVAL_REQUESTED",
+      actor: args.actor,
+      details: { checkpointType: "PNL_RISK_GO_NO_GO", stepKey: "A8_RISK_COMPLIANCE", artifactId, hardStopCount },
+      createdAt: now
+    });
+
+    return { stepId: step._id, artifactId, approvalId, hardStopCount };
+  }
+});

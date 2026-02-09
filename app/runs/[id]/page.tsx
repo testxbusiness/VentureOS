@@ -24,6 +24,7 @@ export default function RunDetailPage() {
   const runA5IdeaGen = useMutation(api.agents.runA5IdeaGen);
   const runA6Scoring = useMutation(api.agents.runA6Scoring);
   const runA7PnlKpi = useMutation(api.agents.runA7PnlKpi);
+  const runA8RiskGoNoGo = useMutation(api.agents.runA8RiskGoNoGo);
   const exportRunArtifacts = useMutation(api.artifacts.exportRunArtifacts);
   const requestApproval = useMutation(api.approvals.requestApproval);
   const completeRun = useMutation(api.steps.completeRun);
@@ -232,6 +233,21 @@ export default function RunDetailPage() {
             }}
           >
             Run A7 PnL/KPI
+          </button>
+          <button
+            className="button"
+            onClick={async () => {
+              setActionError(null);
+              setActionMessage(null);
+              try {
+                const result = await runA8RiskGoNoGo({ runId, actor: "ceo" });
+                setActionMessage(`A8 Risk/GO-NO-GO queued for approval (hard-stop: ${result.hardStopCount}).`);
+              } catch (e) {
+                setActionError(e instanceof Error ? e.message : "A8 failed");
+              }
+            }}
+          >
+            Run A8 Risk GO/NO-GO
           </button>
           <button
             className="button"

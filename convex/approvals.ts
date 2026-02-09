@@ -75,6 +75,20 @@ export const decideApproval = mutation({
     if (!approval) throw new Error("Approval not found");
     if (approval.status !== "pending") throw new Error("Approval already decided");
 
+    if (approval.checkpointType === "PNL_RISK_GO_NO_GO" && args.decision === "approved") {
+      const openHardStops = await ctx.db
+        .query("ventureRiskFlags")
+        .withIndex("by_run", (q) => q.eq("runId", approval.runId))
+        .filter((q) =>
+          q.and(q.eq(q.field("severity"), "hard_stop"), q.eq(q.field("status"), "open"))
+        )
+        .collect();
+
+      if (openHardStops.length > 0) {
+        throw new Error("Cannot approve GO/NO-GO while hard-stop risks are still open");
+      }
+    }
+
     const now = Date.now();
     await ctx.db.patch(approval._id, {
       status: args.decision,
