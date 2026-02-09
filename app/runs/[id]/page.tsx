@@ -3,7 +3,7 @@
 import Link from "next/link";
 import { FormEvent, useMemo, useState } from "react";
 import { useParams } from "next/navigation";
-import { useMutation, useQuery } from "convex/react";
+import { useAction, useMutation, useQuery } from "convex/react";
 import { api } from "@/convex/_generated/api";
 import type { Doc, Id } from "@/convex/_generated/dataModel";
 
@@ -18,7 +18,7 @@ export default function RunDetailPage() {
 
   const rerunStep = useMutation(api.runs.rerunStep);
   const runA1NicheIntake = useMutation(api.agents.runA1NicheIntake);
-  const runA2MarketSignals = useMutation(api.agents.runA2MarketSignals);
+  const runA2MarketSignals = useAction(api.agentsA2.runA2MarketSignals);
   const runA3Voc = useMutation(api.agents.runA3Voc);
   const runA4TriggerMap = useMutation(api.agents.runA4TriggerMap);
   const runA5IdeaGen = useMutation(api.agents.runA5IdeaGen);
