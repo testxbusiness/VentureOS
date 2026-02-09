@@ -568,3 +568,164 @@ export const runA4TriggerMap = mutation({
     return { stepId: step._id, artifactId, approvalId, triggerCount: triggerItems.length };
   }
 });
+
+export const runA5IdeaGen = mutation({
+  args: {
+    runId: v.id("ventureRuns"),
+    actor: v.string()
+  },
+  handler: async (ctx, args) => {
+    const run = await ctx.db.get(args.runId);
+    if (!run) throw new Error("Run not found");
+
+    const approvedTriggerMap = await ctx.db
+      .query("ventureApprovals")
+      .withIndex("by_run", (q) => q.eq("runId", args.runId))
+      .filter((q) => q.and(q.eq(q.field("checkpointType"), "TRIGGER_MAP"), q.eq(q.field("status"), "approved")))
+      .first();
+    if (!approvedTriggerMap) {
+      throw new Error("Trigger Map approval required before running A5");
+    }
+
+    const a4Step = await ctx.db
+      .query("ventureRunSteps")
+      .withIndex("by_run_step", (q) => q.eq("runId", args.runId).eq("stepKey", "A4_TRIGGER_MAP"))
+      .first();
+    if (!a4Step || a4Step.status !== "completed") {
+      throw new Error("A4 Trigger Map must be completed before running A5");
+    }
+
+    const step = await ctx.db
+      .query("ventureRunSteps")
+      .withIndex("by_run_step", (q) => q.eq("runId", args.runId).eq("stepKey", "A5_IDEA_GEN"))
+      .first();
+    if (!step) throw new Error("A5 step not found");
+
+    const triggerItems = ((a4Step.output as { deliverable?: { triggerItems?: Array<{ theme: string }> } })?.deliverable
+      ?.triggerItems ?? []) as Array<{ theme: string }>;
+    if (triggerItems.length === 0) {
+      throw new Error("A4 output has no trigger items for idea generation");
+    }
+
+    const themes = triggerItems.map((item) => item.theme).slice(0, 5);
+    const types = ["affiliate", "directory", "micro_webapp"] as const;
+    const monetizationByType: Record<(typeof types)[number], string> = {
+      affiliate: "commission_per_sale",
+      directory: "sponsored_listing",
+      micro_webapp: "subscription_monthly"
+    };
+
+    const ideas: Array<{
+      ideaKey: string;
+      title: string;
+      type: (typeof types)[number];
+      oneLiner: string;
+      targetPain: string;
+      triggerTheme: string;
+      monetization: string;
+      distribution: string[];
+      wedgeMvp: string;
+      keyRisks: string[];
+    }> = [];
+
+    for (let i = 0; i < 18; i++) {
+      const type = types[i % types.length];
+      const triggerTheme = themes[i % themes.length];
+      const suffix = String(i + 1).padStart(2, "0");
+      const titleBase =
+        type === "affiliate"
+          ? "Decision Kit"
+          : type === "directory"
+            ? "Signal Directory"
+            : "Sprint Copilot";
+
+      ideas.push({
+        ideaKey: `idea_${suffix}`,
+        title: `${titleBase} ${suffix}`,
+        type,
+        oneLiner: `Proposta ${type} orientata al tema ${triggerTheme} per la nicchia ${run.niche}.`,
+        targetPain: triggerTheme,
+        triggerTheme,
+        monetization: monetizationByType[type],
+        distribution: ["seo_clusters", "community_threads", "short_video"],
+        wedgeMvp:
+          type === "micro_webapp"
+            ? "Wizard 3-step + output action plan"
+            : type === "directory"
+              ? "Top 50 risorse curate con filtri intent-based"
+              : "Bundle comparativo con CTA affiliate",
+        keyRisks: ["channel-fit-risk", "offer-clarity-risk"]
+      });
+    }
+
+    const output = {
+      generatedAt: nowIso(),
+      principles: [
+        "Le idee devono essere ancorate ai trigger approvati.",
+        "Ogni idea deve avere wedge MVP e ipotesi monetizzazione esplicita.",
+        "Il batch deve coprire affiliate, directory e micro-webapp."
+      ],
+      deliverable: {
+        ideaCount: ideas.length,
+        typeDistribution: {
+          affiliate: ideas.filter((idea) => idea.type === "affiliate").length,
+          directory: ideas.filter((idea) => idea.type === "directory").length,
+          micro_webapp: ideas.filter((idea) => idea.type === "micro_webapp").length
+        },
+        ideas,
+        checklist: [
+          "Minimo 15 idee generate",
+          "Copertura 3 formati business",
+          "Wedge MVP definito per idea",
+          "Pronto per scoring e shortlist (A6)"
+        ]
+      }
+    };
+
+    const now = Date.now();
+    const evidenceRefs = (a4Step.evidenceRefs ?? []).slice(0, 12);
+    await ctx.db.patch(step._id, {
+      status: "completed",
+      output,
+      evidenceRefs,
+      startedAt: step.startedAt ?? now,
+      finishedAt: now,
+      updatedAt: now
+    });
+
+    await ctx.db.patch(run._id, {
+      status: "running",
+      currentStep: "A5_IDEA_GEN",
+      updatedAt: now
+    });
+
+    const artifactId = await ctx.db.insert("ventureArtifacts", {
+      runId: run._id,
+      stepKey: "A5_IDEA_GEN",
+      artifactType: "idea_batch",
+      format: "json",
+      title: "Idea Batch (A5)",
+      content: output,
+      evidenceRefs,
+      version: 1,
+      createdAt: now
+    });
+
+    await ctx.db.insert("ventureAuditLog", {
+      runId: run._id,
+      entityType: "agent",
+      entityId: `A5:${run._id}`,
+      action: "A5_COMPLETED",
+      actor: args.actor,
+      details: { artifactId, ideaCount: ideas.length },
+      createdAt: now
+    });
+
+    return {
+      stepId: step._id,
+      artifactId,
+      ideaCount: ideas.length,
+      typeDistribution: output.deliverable.typeDistribution
+    };
+  }
+});

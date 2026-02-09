@@ -21,6 +21,7 @@ export default function RunDetailPage() {
   const runA2MarketSignals = useMutation(api.agents.runA2MarketSignals);
   const runA3Voc = useMutation(api.agents.runA3Voc);
   const runA4TriggerMap = useMutation(api.agents.runA4TriggerMap);
+  const runA5IdeaGen = useMutation(api.agents.runA5IdeaGen);
   const requestApproval = useMutation(api.approvals.requestApproval);
   const completeRun = useMutation(api.steps.completeRun);
 
@@ -178,6 +179,24 @@ export default function RunDetailPage() {
             }}
           >
             Run A4 Trigger Map
+          </button>
+          <button
+            className="button"
+            onClick={async () => {
+              setActionError(null);
+              setActionMessage(null);
+              try {
+                const result = await runA5IdeaGen({ runId, actor: "ceo" });
+                const { affiliate, directory, micro_webapp } = result.typeDistribution;
+                setActionMessage(
+                  `A5 Idea Gen completed (${result.ideaCount} ideas: affiliate ${affiliate}, directory ${directory}, micro_webapp ${micro_webapp}).`
+                );
+              } catch (e) {
+                setActionError(e instanceof Error ? e.message : "A5 failed");
+              }
+            }}
+          >
+            Run A5 Idea Gen
           </button>
           <button className="button" onClick={() => completeRun({ runId, status: "completed", actor: "ceo" })}>
             Mark Completed
