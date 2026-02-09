@@ -31,6 +31,19 @@ export const initGlobalGuardrails = mutation({
         "PNL_RISK_GO_NO_GO",
         "SOCIAL_PACK_FINAL"
       ],
+      allowedDomains: [
+        "reddit.com",
+        "youtube.com",
+        "trustpilot.com",
+        "g2.com",
+        "capterra.com",
+        "producthunt.com"
+      ],
+      blockedDomains: ["facebook.com", "instagram.com", "linkedin.com"],
+      maxSourcesPerBatch: 30,
+      maxTokenBudgetPerBatch: 120000,
+      maxCostUsdPerBatch: 7.5,
+      redactPII: true,
       updatedBy: "system",
       updatedAt: Date.now()
     });

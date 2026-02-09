@@ -36,6 +36,7 @@ export default function RunDetailPage() {
   const [actionMessage, setActionMessage] = useState<string | null>(null);
 
   const steps = useMemo(() => (detail?.steps ?? []) as Doc<"ventureRunSteps">[], [detail]);
+  const vocSnippets = useMemo(() => (detail?.vocSnippets ?? []) as Doc<"ventureVocSnippets">[], [detail]);
 
   async function onRequestApproval(event: FormEvent<HTMLFormElement>) {
     event.preventDefault();
@@ -281,7 +282,7 @@ export default function RunDetailPage() {
       <section className="panel">
         <h2>VoC snippets</h2>
         <div className="list">
-          {(detail?.vocSnippets ?? []).map((snippet) => (
+          {vocSnippets.map((snippet) => (
             <article className="item" key={snippet._id}>
               <strong>{snippet.source}</strong>
               <div>{snippet.snippet}</div>

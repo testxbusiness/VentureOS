@@ -151,6 +151,12 @@ export default defineSchema({
     rules: v.array(v.string()),
     hardStops: v.array(v.string()),
     requiredHumanCheckpoints: v.array(v.string()),
+    allowedDomains: v.optional(v.array(v.string())),
+    blockedDomains: v.optional(v.array(v.string())),
+    maxSourcesPerBatch: v.optional(v.number()),
+    maxTokenBudgetPerBatch: v.optional(v.number()),
+    maxCostUsdPerBatch: v.optional(v.number()),
+    redactPII: v.optional(v.boolean()),
     updatedBy: v.string(),
     updatedAt: v.number()
   }).index("by_scope", ["scope"]),
