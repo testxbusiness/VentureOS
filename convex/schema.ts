@@ -2,257 +2,168 @@ import { defineSchema, defineTable } from "convex/server";
 import { v } from "convex/values";
 
 export default defineSchema({
-  projects: defineTable({
-    slug: v.string(),
-    name: v.string(),
-    status: v.union(v.literal("active"), v.literal("paused")),
-    pricingMonthlyEur: v.number(),
-    createdAt: v.number(),
+  ventureRuns: defineTable({
+    niche: v.string(),
+    geo: v.string(),
+    language: v.string(),
+    constraints: v.array(v.string()),
+    capabilities: v.union(v.literal("dev"), v.literal("no_code"), v.literal("hybrid")),
+    status: v.union(
+      v.literal("draft"),
+      v.literal("running"),
+      v.literal("awaiting_approval"),
+      v.literal("approved"),
+      v.literal("blocked"),
+      v.literal("completed"),
+      v.literal("failed")
+    ),
+    currentStep: v.optional(v.string()),
+    lockedAssumptions: v.optional(v.any()),
+    seed: v.optional(v.string()),
+    version: v.number(),
+    startedAt: v.number(),
+    completedAt: v.optional(v.number()),
+    createdBy: v.string(),
     updatedAt: v.number()
-  }).index("by_slug", ["slug"]),
+  })
+    .index("by_status", ["status"])
+    .index("by_updated", ["updatedAt"]),
 
-  guardrails: defineTable({
-    scope: v.string(),
-    rules: v.array(v.string()),
-    blockedTerms: v.array(v.string()),
-    requiredDisclaimers: v.array(v.string()),
-    updatedBy: v.string(),
-    updatedAt: v.number()
-  }).index("by_scope", ["scope"]),
-
-  agentRuns: defineTable({
-    agent: v.string(),
-    status: v.union(v.literal("running"), v.literal("success"), v.literal("failed")),
+  ventureRunSteps: defineTable({
+    runId: v.id("ventureRuns"),
+    stepKey: v.string(),
+    status: v.union(
+      v.literal("pending"),
+      v.literal("running"),
+      v.literal("completed"),
+      v.literal("needs_approval"),
+      v.literal("blocked"),
+      v.literal("failed"),
+      v.literal("skipped")
+    ),
     input: v.optional(v.any()),
     output: v.optional(v.any()),
-    startedAt: v.number(),
-    finishedAt: v.optional(v.number())
-  }).index("by_agent", ["agent"]),
+    evidenceRefs: v.array(v.string()),
+    retryCount: v.number(),
+    startedAt: v.optional(v.number()),
+    finishedAt: v.optional(v.number()),
+    updatedAt: v.number()
+  })
+    .index("by_run", ["runId"])
+    .index("by_run_step", ["runId", "stepKey"])
+    .index("by_status", ["status"]),
 
-  proposals: defineTable({
-    projectSlug: v.string(),
-    proposalType: v.union(
-      v.literal("feature"),
-      v.literal("content_batch"),
-      v.literal("experiment"),
-      v.literal("purchase_request"),
-      v.literal("social_publish"),
-      v.literal("product_expansion"),
-      v.literal("finance_adjustment")
+  ventureApprovals: defineTable({
+    runId: v.id("ventureRuns"),
+    stepId: v.optional(v.id("ventureRunSteps")),
+    checkpointType: v.union(
+      v.literal("NICHE_BRIEF"),
+      v.literal("TRIGGER_MAP"),
+      v.literal("SHORTLIST"),
+      v.literal("PNL_RISK_GO_NO_GO"),
+      v.literal("SOCIAL_PACK_FINAL")
     ),
-    title: v.string(),
-    summary: v.string(),
-    payload: v.any(),
-    riskLevel: v.union(v.literal("low"), v.literal("medium"), v.literal("high")),
-    requiresApproval: v.boolean(),
-    status: v.union(
-      v.literal("PROPOSED"),
-      v.literal("APPROVED"),
-      v.literal("DENIED"),
-      v.literal("EXECUTED"),
-      v.literal("FAILED")
-    ),
-    createdBy: v.string(),
+    status: v.union(v.literal("pending"), v.literal("approved"), v.literal("rejected")),
+    payload: v.optional(v.any()),
+    requestedBy: v.string(),
+    reviewedBy: v.optional(v.string()),
+    decisionNote: v.optional(v.string()),
     createdAt: v.number(),
     updatedAt: v.number()
   })
     .index("by_status", ["status"])
-    .index("by_project", ["projectSlug"]),
+    .index("by_run", ["runId"]),
 
-  approvals: defineTable({
-    proposalId: v.id("proposals"),
-    reviewerId: v.string(),
-    decision: v.union(v.literal("APPROVED"), v.literal("DENIED")),
-    reason: v.optional(v.string()),
-    createdAt: v.number()
-  }).index("by_proposal", ["proposalId"]),
-
-  purchaseRequests: defineTable({
-    proposalId: v.id("proposals"),
-    vendor: v.string(),
-    item: v.string(),
-    amountEur: v.number(),
-    paymentUrl: v.string(),
-    expectedRoi: v.string(),
-    category: v.optional(v.string()),
-    projectSlug: v.optional(v.string()),
-    status: v.union(v.literal("PENDING_APPROVAL"), v.literal("APPROVED_PENDING_PAYMENT"), v.literal("PAID"), v.literal("REJECTED")),
-    paidAt: v.optional(v.number()),
-    createdAt: v.number(),
-    updatedAt: v.number()
-  }).index("by_status", ["status"]),
-
-  artifacts: defineTable({
-    projectSlug: v.string(),
-    artifactType: v.union(
-      v.literal("script"),
-      v.literal("caption"),
-      v.literal("brief"),
-      v.literal("render_spec"),
-      v.literal("report"),
-      v.literal("product_pack")
-    ),
-    sourceProposalId: v.optional(v.id("proposals")),
+  ventureArtifacts: defineTable({
+    runId: v.id("ventureRuns"),
+    stepKey: v.string(),
+    artifactType: v.string(),
+    format: v.union(v.literal("md"), v.literal("json"), v.literal("csv"), v.literal("table")),
+    title: v.string(),
     content: v.any(),
-    createdAt: v.number()
-  }).index("by_project", ["projectSlug"]),
-
-  renderJobs: defineTable({
-    projectSlug: v.string(),
-    status: v.union(v.literal("queued"), v.literal("running"), v.literal("done"), v.literal("failed")),
-    priority: v.number(),
-    renderSpec: v.any(),
-    outputArtifactId: v.optional(v.id("artifacts")),
-    scheduledAt: v.number(),
-    updatedAt: v.number()
-  }).index("by_status", ["status"]),
-
-  socialQueue: defineTable({
-    projectSlug: v.string(),
-    proposalId: v.id("proposals"),
-    platform: v.union(v.literal("youtube"), v.literal("instagram"), v.literal("tiktok")),
-    postCopy: v.string(),
-    assetArtifactId: v.optional(v.id("artifacts")),
-    status: v.union(v.literal("queued"), v.literal("approved"), v.literal("published"), v.literal("failed")),
-    scheduledAt: v.number(),
-    publishedAt: v.optional(v.number())
-  }).index("by_status", ["status"]),
-
-  metricsDaily: defineTable({
-    date: v.string(),
-    projectSlug: v.string(),
-    productEvents: v.any(),
-    contentMetrics: v.any(),
-    revenueMetrics: v.any(),
+    evidenceRefs: v.array(v.string()),
+    version: v.number(),
     createdAt: v.number()
   })
-    .index("by_date", ["date"])
-    .index("by_project_and_date", ["projectSlug", "date"]),
+    .index("by_run", ["runId"])
+    .index("by_run_step", ["runId", "stepKey"]),
 
-  auditLog: defineTable({
+  ventureScores: defineTable({
+    runId: v.id("ventureRuns"),
+    ideaKey: v.string(),
+    rubricVersion: v.string(),
+    dimensions: v.any(),
+    weights: v.any(),
+    overallScore: v.number(),
+    unknowns: v.array(v.string()),
+    createdAt: v.number()
+  })
+    .index("by_run", ["runId"])
+    .index("by_run_score", ["runId", "overallScore"]),
+
+  ventureRiskFlags: defineTable({
+    runId: v.id("ventureRuns"),
+    scope: v.union(
+      v.literal("idea"),
+      v.literal("social"),
+      v.literal("platform"),
+      v.literal("legal"),
+      v.literal("privacy"),
+      v.literal("claims")
+    ),
+    severity: v.union(v.literal("low"), v.literal("medium"), v.literal("high"), v.literal("hard_stop")),
+    title: v.string(),
+    description: v.string(),
+    mitigation: v.optional(v.string()),
+    status: v.union(v.literal("open"), v.literal("mitigated"), v.literal("accepted"), v.literal("waived")),
+    createdAt: v.number(),
+    updatedAt: v.number()
+  })
+    .index("by_run", ["runId"])
+    .index("by_run_severity", ["runId", "severity"]),
+
+  ventureSocialPacks: defineTable({
+    runId: v.id("ventureRuns"),
+    selectedIdeaKey: v.string(),
+    platforms: v.array(v.string()),
+    calendar30d: v.any(),
+    scripts: v.any(),
+    hooks: v.any(),
+    ctas: v.any(),
+    qaStatus: v.union(v.literal("pending"), v.literal("pass"), v.literal("fail")),
+    qaNotes: v.optional(v.string()),
+    createdAt: v.number(),
+    updatedAt: v.number()
+  }).index("by_run", ["runId"]),
+
+  ventureVocSnippets: defineTable({
+    runId: v.id("ventureRuns"),
+    source: v.string(),
+    snippet: v.string(),
+    tags: v.array(v.string()),
+    url: v.optional(v.string()),
+    createdAt: v.number()
+  }).index("by_run", ["runId"]),
+
+  ventureGuardrails: defineTable({
+    scope: v.union(v.literal("global"), v.literal("run")),
+    runId: v.optional(v.id("ventureRuns")),
+    rules: v.array(v.string()),
+    hardStops: v.array(v.string()),
+    requiredHumanCheckpoints: v.array(v.string()),
+    updatedBy: v.string(),
+    updatedAt: v.number()
+  }).index("by_scope", ["scope"]),
+
+  ventureAuditLog: defineTable({
+    runId: v.optional(v.id("ventureRuns")),
     entityType: v.string(),
     entityId: v.string(),
     action: v.string(),
     actor: v.string(),
     details: v.any(),
     createdAt: v.number()
-  }).index("by_entity", ["entityType", "entityId"]),
-
-  viralVideos: defineTable({
-    source: v.string(),
-    videoId: v.string(),
-    title: v.string(),
-    url: v.string(),
-    stats: v.any(),
-    ingestedAt: v.number()
-  }).index("by_source", ["source"]),
-
-  viralInsights: defineTable({
-    videoRef: v.string(),
-    hooks: v.array(v.string()),
-    emotionalAngles: v.array(v.string()),
-    ctas: v.array(v.string()),
-    editingCues: v.array(v.string()),
-    createdAt: v.number()
-  }),
-
-  patternLibrary: defineTable({
-    projectSlug: v.string(),
-    patternType: v.union(v.literal("hook"), v.literal("story_arc"), v.literal("cta"), v.literal("visual_cue")),
-    patternText: v.string(),
-    score: v.number(),
-    sourceRefs: v.array(v.string()),
-    createdAt: v.number(),
-    updatedAt: v.number()
-  }).index("by_project", ["projectSlug"]),
-
-  productIdeas: defineTable({
-    title: v.string(),
-    ideaType: v.union(v.literal("digital"), v.literal("pod"), v.literal("bundle")),
-    targetEmotion: v.string(),
-    status: v.union(v.literal("new"), v.literal("validated"), v.literal("rejected")),
-    createdAt: v.number(),
-    updatedAt: v.number()
-  }).index("by_status", ["status"]),
-
-  marketResearch: defineTable({
-    ideaId: v.id("productIdeas"),
-    competitors: v.array(v.any()),
-    priceRange: v.string(),
-    gaps: v.array(v.string()),
-    createdAt: v.number()
-  }).index("by_idea", ["ideaId"]),
-
-  emotionInsights: defineTable({
-    source: v.string(),
-    cluster: v.string(),
-    painPoints: v.array(v.string()),
-    desiredOutcomes: v.array(v.string()),
-    createdAt: v.number()
-  }).index("by_source", ["source"]),
-
-  productProposals: defineTable({
-    ideaId: v.id("productIdeas"),
-    title: v.string(),
-    payload: v.any(),
-    status: v.union(v.literal("PROPOSED"), v.literal("APPROVED"), v.literal("DENIED"), v.literal("EXECUTED")),
-    createdAt: v.number(),
-    updatedAt: v.number()
-  }).index("by_status", ["status"]),
-
-  productArtifacts: defineTable({
-    ideaId: v.id("productIdeas"),
-    artifactType: v.union(v.literal("listing_copy"), v.literal("mockup"), v.literal("pack_file"), v.literal("faq")),
-    content: v.any(),
-    createdAt: v.number()
-  }).index("by_idea", ["ideaId"]),
-
-  ipChecks: defineTable({
-    ideaId: v.id("productIdeas"),
-    status: v.union(v.literal("passed"), v.literal("warning"), v.literal("failed")),
-    findings: v.array(v.string()),
-    createdAt: v.number()
-  }).index("by_idea", ["ideaId"]),
-
-  listingQueue: defineTable({
-    ideaId: v.id("productIdeas"),
-    channel: v.string(),
-    status: v.union(v.literal("queued"), v.literal("approved"), v.literal("published"), v.literal("failed")),
-    listingPayload: v.any(),
-    scheduledAt: v.number(),
-    publishedAt: v.optional(v.number())
-  }).index("by_status", ["status"]),
-
-  ledgerEntries: defineTable({
-    date: v.string(),
-    type: v.union(v.literal("revenue"), v.literal("expense"), v.literal("fee"), v.literal("refund")),
-    amount: v.number(),
-    currency: v.string(),
-    category: v.string(),
-    vendor: v.optional(v.string()),
-    projectSlug: v.optional(v.string()),
-    source: v.union(v.literal("stripe"), v.literal("manual"), v.literal("purchase_request"), v.literal("bank_import")),
-    externalRef: v.optional(v.string()),
-    note: v.optional(v.string()),
-    attachment: v.optional(v.string()),
-    reconciled: v.boolean(),
-    createdAt: v.number(),
-    updatedAt: v.number()
   })
-    .index("by_date", ["date"])
-    .index("by_type", ["type"])
-    .index("by_source", ["source"])
-    .index("by_category", ["category"]),
-
-  budgets: defineTable({
-    month: v.string(),
-    category: v.string(),
-    limitAmount: v.number(),
-    currency: v.string(),
-    alertThreshold: v.number(),
-    createdAt: v.number(),
-    updatedAt: v.number()
-  })
-    .index("by_month", ["month"])
-    .index("by_month_category", ["month", "category"])
+    .index("by_run", ["runId"])
+    .index("by_entity", ["entityType", "entityId"])
 });

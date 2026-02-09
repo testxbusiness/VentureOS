@@ -1,51 +1,63 @@
-const cards = [
-  { label: "Proposte in inbox", value: "12" },
-  { label: "Purchase pending payment", value: "2" },
-  { label: "Contenuti in queue", value: "30" },
-  { label: "MRR (this month)", value: "€1,240" },
-  { label: "Burn (this month)", value: "€410" },
-  { label: "Runway stimata", value: "3.0 mesi" }
-];
+"use client";
+
+import Link from "next/link";
+import { useMemo } from "react";
+import { useQuery } from "convex/react";
+import { api } from "@/convex/_generated/api";
 
 export default function HomePage() {
+  const runs = useQuery(api.runs.listRuns, {});
+  const approvals = useQuery(api.approvals.listApprovalQueue, {});
+
+  const stats = useMemo(() => {
+    const list = runs ?? [];
+    return {
+      totalRuns: list.length,
+      runningRuns: list.filter((r) => r.status === "running").length,
+      waitingApprovals: approvals?.length ?? 0,
+      blockedRuns: list.filter((r) => r.status === "blocked").length
+    };
+  }, [runs, approvals]);
+
   return (
     <main className="container">
       <section className="hero">
-        <span className="kicker">CEO Console</span>
-        <h1>AI Company OS for Emotional Pregnancy</h1>
+        <span className="kicker">VentureOS Dashboard</span>
+        <h1>Run-Centric Venture Pipeline</h1>
         <p>
-          Operating system con pipeline <strong>Propose - Approve - Execute</strong>, guardrail no-medical,
-          publish manuale e sezione Finance con ledger/PnL.
+          Baseline M0: orchestrazione run, approval queue e audit trail per passare da nicchia a shortlist,
+          social pack e roadmap con checkpoint human-in-the-loop.
         </p>
       </section>
 
       <section className="card-grid">
-        {cards.map((card) => (
-          <article className="card" key={card.label}>
-            <h3>{card.label}</h3>
-            <p>{card.value}</p>
-          </article>
-        ))}
+        <article className="card">
+          <h3>Total Runs</h3>
+          <p>{runs === undefined ? "..." : stats.totalRuns}</p>
+        </article>
+        <article className="card">
+          <h3>Running</h3>
+          <p>{runs === undefined ? "..." : stats.runningRuns}</p>
+        </article>
+        <article className="card">
+          <h3>Waiting Approvals</h3>
+          <p>{approvals === undefined ? "..." : stats.waitingApprovals}</p>
+        </article>
+        <article className="card">
+          <h3>Blocked Runs</h3>
+          <p>{runs === undefined ? "..." : stats.blockedRuns}</p>
+        </article>
       </section>
 
       <section className="panel">
-        <span className="badge">Today</span>
-        <h2>Operating loop</h2>
-        <p>
-          Daily cycle attivo: analytics, content batch, compliance check, proposals in inbox. Tutte le azioni
-          sensibili restano in attesa di approvazione CEO.
-        </p>
-      </section>
-
-      <section className="panel">
-        <h2>CEO actions</h2>
+        <h2>Workspace</h2>
         <div style={{ display: "flex", gap: 10, flexWrap: "wrap" }}>
-          <a className="button" href="/proposals">
-            Open Proposals Inbox
-          </a>
-          <a className="button" href="/finance">
-            Open Finance Dashboard
-          </a>
+          <Link className="button" href="/runs">
+            Open Runs
+          </Link>
+          <Link className="button" href="/approvals">
+            Open Approval Queue
+          </Link>
         </div>
       </section>
     </main>

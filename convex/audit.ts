@@ -3,6 +3,7 @@ import { v } from "convex/values";
 
 export const appendAudit = mutation({
   args: {
+    runId: v.optional(v.id("ventureRuns")),
     entityType: v.string(),
     entityId: v.string(),
     action: v.string(),
@@ -10,23 +11,22 @@ export const appendAudit = mutation({
     details: v.any()
   },
   handler: async (ctx, args) => {
-    return await ctx.db.insert("auditLog", {
+    return await ctx.db.insert("ventureAuditLog", {
       ...args,
       createdAt: Date.now()
     });
   }
 });
 
-export const listAuditByEntity = query({
+export const listRunAudit = query({
   args: {
-    entityType: v.string(),
-    entityId: v.string()
+    runId: v.id("ventureRuns")
   },
   handler: async (ctx, args) => {
     return await ctx.db
-      .query("auditLog")
-      .withIndex("by_entity", (q) => q.eq("entityType", args.entityType).eq("entityId", args.entityId))
+      .query("ventureAuditLog")
+      .withIndex("by_run", (q) => q.eq("runId", args.runId))
       .order("desc")
-      .take(100);
+      .take(200);
   }
 });

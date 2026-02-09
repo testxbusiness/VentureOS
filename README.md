@@ -1,90 +1,73 @@
 # VentureOS
 
 <p align="left">
-  <img src="assets/brand/ventureos_logo_icon_dark.svg" alt="VentureOS logo" width="72" />
+  <img src="assets/brand/ventureos_logo_icon_dark.svg" alt="VentureOS logo" width="88" />
 </p>
 
-VentureOS è un sistema operativo agentico per costruire e far crescere prodotti digitali con approvazione umana sui passaggi critici.
+VentureOS è un sistema agentico **run-centric** che trasforma una nicchia in output operativi per validare e lanciare micro-business, mantenendo checkpoint di approvazione umana sui passaggi critici.
 
-In questa repository trovi la prima implementazione di una AI company orientata a:
-- progettazione e iterazione di mini webapp,
-- content factory per social,
-- governance con approvazioni CEO,
-- controllo finanziario con ledger e PnL.
+## Scopo del progetto
 
-## Core Principles
+Ridurre il tempo tra "idea" e "piano eseguibile" con una pipeline unica che produce:
+- ricerca mercato e segnali domanda,
+- VoC strutturata (pain, desideri, obiezioni, linguaggio reale),
+- trigger map emotiva/logica,
+- idee business con scoring e shortlist,
+- analisi PnL-lite + risk memo,
+- social pack 30 giorni,
+- roadmap 30/60/90 con backlog.
 
-- Human-in-the-loop: le azioni sensibili passano da approvazione.
-- No automatic spend: ogni spesa è richiesta, pagata manualmente e confermata.
-- Compliance-first: guardrail applicati ai contenuti prima dell’esecuzione.
-- Auditability: eventi e decisioni tracciati in audit log append-only.
+## Principi chiave
 
-## What’s Implemented
+- **Human-in-the-loop**: i checkpoint decisionali richiedono approvazione.
+- **Compliance-first**: guardrail e policy check prima di ogni output sensibile.
+- **Auditability**: ogni azione è tracciata in audit log.
+- **Ripetibilità**: run versionate e confrontabili.
 
-- Workflow `Propose -> Approve -> Execute` per iniziative prodotto, contenuto e operative.
-- Guardrail layer con controlli no-medical.
-- Purchase requests con stato approvazione e conferma pagamento manuale.
-- Social queue con approvazione e publish manuale.
-- Agent runtime su Convex con orchestrazione daily/weekly.
-- LLM gateway unificato (MVP) con validazione output minima.
-- Finance module:
-  - `ledgerEntries` (revenue, expense, fee, refund)
-  - `budgets`
-  - overview PnL / burn / runway
-  - registrazione spese da purchase request pagata
-  - ingest eventi Stripe verso ledger
-- Product expansion foundation con idea pipeline e listing queue.
-- CEO Console (Next.js) con dashboard, proposals inbox e finance page.
+## Workflow VentureOS
 
-## Tech Stack
+`Input -> Brief -> Market Signals -> VoC -> Trigger Map -> Idea Gen -> Scoring -> PnL-lite -> Risk -> Social Pack -> Roadmap`
 
-- Next.js
-- Convex
-- React
-- TypeScript
-- Stripe (integration foundation)
+Checkpoint obbligatori:
+- Niche Brief
+- Trigger Map
+- Shortlist
+- PnL/Risk GO-NO GO
+- Social Pack finale
 
-## Brand Assets
+## Stato attuale
 
-- Brand images: `assets/brand/`
-- Primary icon used in this README: `assets/brand/ventureos_logo_icon_dark.svg`
-- Additional variants:
-  - `assets/brand/ventureos_logo_icon_light.svg`
-  - `assets/brand/ventureos_logo_favicon_dark.svg`
+Baseline **M0** attiva:
+- backend Convex run-centric (runs, steps, approvals, artifacts, scores, risks, social pack, audit),
+- dashboard con pagine `Runs`, `Run Detail`, `Approval Queue`,
+- home con KPI runtime reali,
+- smoke test su deployment Convex eseguito.
 
-## Project Structure
+## Stack
 
-- `convex/schema.ts` — schema e indici principali
-- `convex/proposals.ts` — flusso propose/approve/execute
-- `convex/purchaseRequests.ts` — richieste acquisto e pagamento manuale
-- `convex/finance.ts` — ledger, budget, PnL overview
-- `convex/stripe.ts` — ingest eventi Stripe nel ledger
-- `convex/orchestrator.ts` — cicli autonomi daily/weekly
-- `convex/llmGateway.ts` — gateway LLM centralizzato (MVP)
-- `convex/productExpansion.ts` — pipeline prodotti adiacenti
-- `convex/crons.ts` — job schedulati
-- `app/` — CEO Console (dashboard, proposals, finance)
+- Next.js + React + TypeScript
+- Convex (runtime agenti, storage, API, audit)
+- Clerk (RBAC, planned)
+- GitHub Actions (pipeline media, planned)
 
-## Quick Start
+## Struttura repository
+
+- `app/` — dashboard VentureOS
+- `convex/` — schema, mutation/query e orchestrazione backend
+- `assets/brand/` — logo e asset SVG
+- `docs/PRD_VentureOS_v1.md` — PRD v1
+- `docs/RELEASE_PLAN_V1.md` — piano rilascio M0→M5
+
+## Avvio locale
 
 ```bash
 npm install
-cp .env.example .env.local
 npm run convex:dev
-# in another terminal
 npm run dev
 ```
 
-Open:
-- `http://localhost:3000/`
-- `http://localhost:3000/proposals`
-- `http://localhost:3000/finance`
+## Brand
 
-## Current Scope
-
-La base è pronta per evolvere verso:
-- auth/rbac CEO-only con Clerk,
-- webhook Stripe completo con signature verification,
-- UI connesse a query/mutation Convex reali,
-- pipeline video rendering su GitHub Actions,
-- mini webapp production-ready con funnel completo.
+- Logo SVG (dark): `assets/brand/ventureos_logo_icon_dark.svg`
+- Logo SVG (light): `assets/brand/ventureos_logo_icon_light.svg`
+- Favicon SVG: `assets/brand/ventureos_logo_favicon_dark.svg`

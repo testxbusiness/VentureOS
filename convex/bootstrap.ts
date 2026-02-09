@@ -1,39 +1,48 @@
-import { mutation } from "./_generated/server";
+import { mutation, query } from "./_generated/server";
 
-export const initWorkspace = mutation({
+export const initGlobalGuardrails = mutation({
   args: {},
   handler: async (ctx) => {
     const existing = await ctx.db
-      .query("guardrails")
-      .withIndex("by_scope", (q) => q.eq("scope", "company"))
+      .query("ventureGuardrails")
+      .withIndex("by_scope", (q) => q.eq("scope", "global"))
       .first();
 
-    if (!existing) {
-      await ctx.db.insert("guardrails", {
-        scope: "company",
-        rules: [
-          "No medical advice, diagnosis, or risk claims",
-          "All irreversible actions must be approved",
-          "No automatic spend"
-        ],
-        blockedTerms: [
-          "diagnosi",
-          "rischio clinico",
-          "prescrizione",
-          "farmaco",
-          "terapia",
-          "medical advice",
-          "consult your doctor"
-        ],
-        requiredDisclaimers: [
-          "This product is for emotional and organizational support only.",
-          "No medical advice."
-        ],
-        updatedBy: "system",
-        updatedAt: Date.now()
-      });
-    }
+    if (existing) return existing._id;
 
-    return { ok: true };
+    return await ctx.db.insert("ventureGuardrails", {
+      scope: "global",
+      runId: undefined,
+      rules: [
+        "No external action without approval",
+        "No auto-publish",
+        "No auto-spend",
+        "No deceptive claims"
+      ],
+      hardStops: [
+        "No scraping against platform TOS",
+        "No fake reviews, impersonation or manipulation",
+        "No sensitive health/finance promises"
+      ],
+      requiredHumanCheckpoints: [
+        "NICHE_BRIEF",
+        "TRIGGER_MAP",
+        "SHORTLIST",
+        "PNL_RISK_GO_NO_GO",
+        "SOCIAL_PACK_FINAL"
+      ],
+      updatedBy: "system",
+      updatedAt: Date.now()
+    });
+  }
+});
+
+export const getGlobalGuardrails = query({
+  args: {},
+  handler: async (ctx) => {
+    return await ctx.db
+      .query("ventureGuardrails")
+      .withIndex("by_scope", (q) => q.eq("scope", "global"))
+      .first();
   }
 });
