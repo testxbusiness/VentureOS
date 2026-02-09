@@ -27,6 +27,7 @@ export const runA2MarketSignals = action({
   handler: async (ctx, args) => {
     const detail = await ctx.runQuery(internalApi.runs.getRunDetail, { runId: args.runId });
     if (!detail) throw new Error("Run not found");
+    const policy = await ctx.runQuery(internalApi.research.getEffectiveResearchGuardrails, { runId: args.runId });
 
     const approvedBrief = (detail.approvals ?? []).find(
       (item: any) => item.checkpointType === "NICHE_BRIEF" && item.status === "approved"
@@ -42,7 +43,7 @@ export const runA2MarketSignals = action({
       niche: detail.run.niche,
       geo: detail.run.geo,
       language: detail.run.language,
-      maxSources: 18
+      maxSources: Math.max(8, Math.min(policy.maxSourcesPerBatch ?? 18, 40))
     });
     if (!retrieved.sources.length) {
       throw new Error("No market sources retrieved for A2");
@@ -122,6 +123,37 @@ export const runA2MarketSignals = action({
       };
     }
 
+    const opportunityRanking = analysis.differentiationOptions.slice(0, 5).map((option, index) => {
+      const demandScore = Number((6.8 + Math.min(2, analysis.keyDemandSignals.length * 0.2) - index * 0.15).toFixed(2));
+      const competitionScore = Number(
+        (analysis.saturationLevel === "high" ? 5.6 : analysis.saturationLevel === "medium" ? 6.6 : 7.4).toFixed(2)
+      );
+      const monetizationScore = Number((6.5 + Math.min(2.2, analysis.monetizationPatterns.length * 0.25) - index * 0.1).toFixed(2));
+      const executionSpeedScore = Number((7.2 - index * 0.18).toFixed(2));
+      const compositeScore = Number(
+        (
+          demandScore * 0.35 +
+          competitionScore * 0.2 +
+          monetizationScore * 0.25 +
+          executionSpeedScore * 0.2
+        ).toFixed(2)
+      );
+      return {
+        rank: index + 1,
+        option,
+        primaryChannel: analysis.priorityChannels[index % Math.max(1, analysis.priorityChannels.length)] ?? "seo_clusters",
+        primaryMonetization:
+          analysis.monetizationPatterns[index % Math.max(1, analysis.monetizationPatterns.length)] ?? "subscription",
+        scoreBreakdown: {
+          demandScore,
+          competitionScore,
+          monetizationScore,
+          executionSpeedScore
+        },
+        compositeScore
+      };
+    });
+
     const evidenceRefs = retrieved.sources.map((item: any) => `url:${item.url}`);
     const signals = {
       generatedAt: nowIso(),
@@ -137,6 +169,7 @@ export const runA2MarketSignals = action({
         language: detail.run.language,
         sourceProvider: retrieved.provider,
         sourceCount: retrieved.sources.length,
+        requiredSourceFloor: policy.maxSourcesPerBatch ?? 30,
         llmFallbackUsed
       },
       deliverable: {
@@ -144,6 +177,7 @@ export const runA2MarketSignals = action({
         monetizationPatterns: analysis.monetizationPatterns,
         saturationLevel: analysis.saturationLevel,
         differentiationOptions: analysis.differentiationOptions,
+        opportunityRanking,
         priorityChannels: analysis.priorityChannels,
         keyDemandSignals: analysis.keyDemandSignals,
         sourceSample: retrieved.sources.slice(0, 8),
