@@ -11,6 +11,18 @@ type MarketSource = {
   query: string;
 };
 
+function unwrapDuckDuckGoRedirect(inputUrl: string): string {
+  try {
+    const parsed = new URL(inputUrl.startsWith("//") ? `https:${inputUrl}` : inputUrl);
+    if (!parsed.hostname.includes("duckduckgo.com")) return parsed.toString();
+    const uddg = parsed.searchParams.get("uddg");
+    if (!uddg) return parsed.toString();
+    return decodeURIComponent(uddg);
+  } catch {
+    return inputUrl;
+  }
+}
+
 function decodeHtml(input: string): string {
   return input
     .replace(/&amp;/g, "&")
@@ -31,7 +43,8 @@ function extractResultsFromDuckDuckGo(html: string, query: string): MarketSource
       const rawUrl = decodeHtml(match[1] ?? "");
       const title = stripTags(decodeHtml(match[2] ?? ""));
       const snippet = stripTags(decodeHtml(match[3] ?? ""));
-      const url = rawUrl.startsWith("//") ? `https:${rawUrl}` : rawUrl;
+      const normalizedUrl = rawUrl.startsWith("//") ? `https:${rawUrl}` : rawUrl;
+      const url = unwrapDuckDuckGoRedirect(normalizedUrl);
       if (!url || !title || !snippet) return null;
       return {
         url,

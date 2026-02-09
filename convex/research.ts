@@ -19,14 +19,29 @@ function redactPII(text: string): string {
   return emailRedacted.replace(/(\+?\d[\d\s().-]{7,}\d)/g, "[REDACTED_PHONE]");
 }
 
-const SENSITIVE_CLAIM_TERMS = [
-  "diagnosi",
-  "terapia",
-  "cura",
-  "farmaco",
-  "medical advice",
-  "guaranteed result",
-  "risultato garantito"
+const SENSITIVE_CLAIM_PATTERNS = [
+  /\bdiagnosi\b/i,
+  /\bterapia\b/i,
+  /\bcura\b/i,
+  /\bfarmaco\b/i,
+  /\bmedical advice\b/i,
+  /\bguaranteed results?\b/i,
+  /\brisultat[oi] garantit[oi]\b/i
+];
+
+const REGULATED_NICHE_TERMS = [
+  "health",
+  "medical",
+  "medico",
+  "salute",
+  "finance",
+  "finanza",
+  "investment",
+  "investimenti",
+  "legal",
+  "legale",
+  "insurance",
+  "assicurazioni"
 ];
 
 type GuardrailPolicy = {
@@ -186,8 +201,12 @@ export const evaluateResearchBatch = mutation({
   },
   handler: async (ctx, args) => {
     const policy = await resolveEffectivePolicy(ctx, args.runId);
+    const run = await ctx.db.get(args.runId);
+    if (!run) throw new Error("Run not found");
     const reasonCodes: string[] = [];
+    const warningCodes: string[] = [];
     const blockedDomains: string[] = [];
+    const nonAllowedDomains: string[] = [];
     const invalidUrls: string[] = [];
 
     const uniqueDomains = [...new Set(args.sources.map((s) => getDomain(s.url)).filter(Boolean) as string[])];
@@ -204,19 +223,22 @@ export const evaluateResearchBatch = mutation({
         blockedDomains.push(domain);
       }
       if (allowedSet.size > 0 && !allowedSet.has(domain)) {
-        blockedDomains.push(domain);
+        nonAllowedDomains.push(domain);
       }
     }
 
     if (invalidUrls.length > 0) reasonCodes.push("INVALID_SOURCE_URL");
     if (blockedDomains.length > 0) reasonCodes.push("SOURCE_POLICY_BLOCK");
+    if (nonAllowedDomains.length > 0) warningCodes.push("SOURCE_ALLOWLIST_MISS");
     if (args.sources.length > policy.maxSourcesPerBatch) reasonCodes.push("SOURCE_COUNT_LIMIT");
     if (args.estimatedTokens > policy.maxTokenBudgetPerBatch) reasonCodes.push("TOKEN_BUDGET_EXCEEDED");
     if (args.estimatedCostUsd > policy.maxCostUsdPerBatch) reasonCodes.push("COST_BUDGET_EXCEEDED");
 
-    const sensitiveHits = args.sources.filter((source) =>
-      SENSITIVE_CLAIM_TERMS.some((term) => source.snippet.toLowerCase().includes(term))
-    );
+    const nicheText = `${run.niche ?? ""}`.toLowerCase();
+    const isRegulatedNiche = REGULATED_NICHE_TERMS.some((term) => nicheText.includes(term));
+    const sensitiveHits = isRegulatedNiche
+      ? args.sources.filter((source) => SENSITIVE_CLAIM_PATTERNS.some((pattern) => pattern.test(source.snippet)))
+      : [];
     if (sensitiveHits.length > 0) reasonCodes.push("SENSITIVE_CLAIM_DETECTED");
 
     const shouldBlock = reasonCodes.length > 0;
@@ -259,6 +281,8 @@ export const evaluateResearchBatch = mutation({
         estimatedTokens: args.estimatedTokens,
         estimatedCostUsd: args.estimatedCostUsd,
         blockedDomains: [...new Set(blockedDomains)],
+        nonAllowedDomains: [...new Set(nonAllowedDomains)],
+        warningCodes,
         sampleSources: auditSources
       }
     });
@@ -267,6 +291,7 @@ export const evaluateResearchBatch = mutation({
       allowed: !shouldBlock,
       blocked: shouldBlock,
       reasonCodes,
+      warningCodes,
       uniqueDomains,
       effectivePolicy: policy
     };
