@@ -20,6 +20,7 @@ export default function RunDetailPage() {
   const runA1NicheIntake = useMutation(api.agents.runA1NicheIntake);
   const runA2MarketSignals = useMutation(api.agents.runA2MarketSignals);
   const runA3Voc = useMutation(api.agents.runA3Voc);
+  const runA4TriggerMap = useMutation(api.agents.runA4TriggerMap);
   const requestApproval = useMutation(api.approvals.requestApproval);
   const completeRun = useMutation(api.steps.completeRun);
 
@@ -162,6 +163,21 @@ export default function RunDetailPage() {
             }}
           >
             Run A3 VoC
+          </button>
+          <button
+            className="button"
+            onClick={async () => {
+              setActionError(null);
+              setActionMessage(null);
+              try {
+                const result = await runA4TriggerMap({ runId, actor: "ceo" });
+                setActionMessage(`A4 Trigger Map completed and sent to approval (${result.triggerCount} triggers).`);
+              } catch (e) {
+                setActionError(e instanceof Error ? e.message : "A4 failed");
+              }
+            }}
+          >
+            Run A4 Trigger Map
           </button>
           <button className="button" onClick={() => completeRun({ runId, status: "completed", actor: "ceo" })}>
             Mark Completed

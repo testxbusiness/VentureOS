@@ -419,3 +419,152 @@ export const runA3Voc = mutation({
     return { stepId: step._id, artifactId, snippetCount: snippetRecords.length, topThemeCount: topThemes.length };
   }
 });
+
+export const runA4TriggerMap = mutation({
+  args: {
+    runId: v.id("ventureRuns"),
+    actor: v.string()
+  },
+  handler: async (ctx, args) => {
+    const run = await ctx.db.get(args.runId);
+    if (!run) throw new Error("Run not found");
+
+    const a3Step = await ctx.db
+      .query("ventureRunSteps")
+      .withIndex("by_run_step", (q) => q.eq("runId", args.runId).eq("stepKey", "A3_VOC"))
+      .first();
+    if (!a3Step || a3Step.status !== "completed") {
+      throw new Error("A3 VoC must be completed before running A4");
+    }
+
+    const step = await ctx.db
+      .query("ventureRunSteps")
+      .withIndex("by_run_step", (q) => q.eq("runId", args.runId).eq("stepKey", "A4_TRIGGER_MAP"))
+      .first();
+    if (!step) throw new Error("A4 step not found");
+    if (step.status === "needs_approval") throw new Error("A4 already waiting approval");
+
+    const rawThemes = ((a3Step.output as { deliverable?: { topThemes?: Array<{ theme: string; count: number }> } })?.deliverable
+      ?.topThemes ?? []) as Array<{ theme: string; count: number }>;
+    if (rawThemes.length === 0) {
+      throw new Error("A3 output has no top themes to map");
+    }
+
+    const topThemes = rawThemes.slice(0, 5);
+    const emotionalTriggerByTheme: Record<string, string[]> = {
+      "pain:fragmented-workflow": ["frustrazione da dispersione", "ansia da overload operativo"],
+      "pain:slow-results": ["paura di sprecare tempo", "sfiducia nel processo"],
+      "pain:channel-confusion": ["paralisi decisionale", "timore di scegliere il canale sbagliato"],
+      "objection:proof-gap": ["insicurezza", "bisogno di prova sociale"],
+      "constraint:low-budget": ["ansia da rischio economico", "avversione alla perdita"],
+      "desire:clarity": ["sollievo da complessita", "senso di controllo"],
+      "desire:quick-wins": ["motivazione immediata", "ricerca di momentum"],
+      "desire:monetization-clarity": ["bisogno di prevedibilita", "senso di fattibilita"]
+    };
+
+    const logicalTriggerByTheme: Record<string, string[]> = {
+      "pain:fragmented-workflow": ["workflow in 1 pagina", "priorita giornaliera unica"],
+      "pain:slow-results": ["metrica leading entro 7 giorni", "test con outcome binario"],
+      "pain:channel-confusion": ["framework di scelta canale", "criteri comparabili per canale"],
+      "objection:proof-gap": ["case locale", "evidenze tracciabili"],
+      "constraint:low-budget": ["test minimo costo", "ordine esperimenti per ROI atteso"],
+      "desire:clarity": ["next step esplicito", "checklist operativa"],
+      "desire:quick-wins": ["milestone 48h", "risultato parziale misurabile"],
+      "desire:monetization-clarity": ["mappa monetizzazione", "funnel base conversione"]
+    };
+
+    const antiMessages = [
+      "Promesse di risultato garantito o facile.",
+      "Messaggi generici senza prova o contesto locale.",
+      "Linguaggio tecnico non traducibile in azione immediata.",
+      "Focalizzazione su vanity metrics al posto di outcome economici."
+    ];
+
+    const triggerItems = topThemes.map((item) => ({
+      theme: item.theme,
+      evidenceWeight: item.count,
+      emotionalTriggers: emotionalTriggerByTheme[item.theme] ?? ["desiderio di semplificazione", "riduzione incertezza"],
+      logicalTriggers: logicalTriggerByTheme[item.theme] ?? ["passo operativo successivo", "criterio decisionale chiaro"],
+      suggestedMessageAngles: [
+        `Parti da ${item.theme} con un solo passo eseguibile oggi.`,
+        "Mostra evidenza concreta prima di proporre una strategia completa."
+      ]
+    }));
+
+    const triggerMap = {
+      generatedAt: nowIso(),
+      principles: [
+        "Ogni trigger deriva dai top themes della VoC.",
+        "Il messaging deve bilanciare leva emotiva e prova logica.",
+        "Anti-messaggi esplicitano cosa evitare in copy e contenuti."
+      ],
+      deliverable: {
+        triggerItems,
+        antiMessages,
+        checklist: [
+          "Trigger emotivi mappati sui top themes",
+          "Trigger logici orientati ad azione e prova",
+          "Anti-messaggi espliciti",
+          "Pronto per Idea Generation (A5)"
+        ]
+      }
+    };
+
+    const vocEvidenceRefs = (a3Step.evidenceRefs ?? []).slice(0, 12);
+    const now = Date.now();
+    await ctx.db.patch(step._id, {
+      status: "needs_approval",
+      output: triggerMap,
+      evidenceRefs: vocEvidenceRefs,
+      startedAt: step.startedAt ?? now,
+      finishedAt: now,
+      updatedAt: now
+    });
+
+    await ctx.db.patch(run._id, {
+      status: "awaiting_approval",
+      currentStep: "A4_TRIGGER_MAP",
+      updatedAt: now
+    });
+
+    const artifactId = await ctx.db.insert("ventureArtifacts", {
+      runId: run._id,
+      stepKey: "A4_TRIGGER_MAP",
+      artifactType: "trigger_map",
+      format: "json",
+      title: "Trigger Map (A4)",
+      content: triggerMap,
+      evidenceRefs: vocEvidenceRefs,
+      version: 1,
+      createdAt: now
+    });
+
+    const approvalId = await ctx.db.insert("ventureApprovals", {
+      runId: run._id,
+      stepId: step._id,
+      checkpointType: "TRIGGER_MAP",
+      status: "pending",
+      payload: {
+        summary: "Review Trigger Map before moving to A5.",
+        artifactId
+      },
+      requestedBy: args.actor,
+      reviewedBy: undefined,
+      decisionNote: undefined,
+      createdAt: now,
+      updatedAt: now
+    });
+
+    await ctx.db.insert("ventureAuditLog", {
+      runId: run._id,
+      entityType: "approval",
+      entityId: approvalId,
+      action: "APPROVAL_REQUESTED",
+      actor: args.actor,
+      details: { checkpointType: "TRIGGER_MAP", stepKey: "A4_TRIGGER_MAP", artifactId },
+      createdAt: now
+    });
+
+    return { stepId: step._id, artifactId, approvalId, triggerCount: triggerItems.length };
+  }
+});
