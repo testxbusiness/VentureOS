@@ -19,6 +19,7 @@ export default function RunDetailPage() {
   const rerunStep = useMutation(api.runs.rerunStep);
   const runA1NicheIntake = useMutation(api.agents.runA1NicheIntake);
   const runA2MarketSignals = useMutation(api.agents.runA2MarketSignals);
+  const runA3Voc = useMutation(api.agents.runA3Voc);
   const requestApproval = useMutation(api.approvals.requestApproval);
   const completeRun = useMutation(api.steps.completeRun);
 
@@ -145,6 +146,23 @@ export default function RunDetailPage() {
           >
             Run A2 Market Signals
           </button>
+          <button
+            className="button"
+            onClick={async () => {
+              setActionError(null);
+              setActionMessage(null);
+              try {
+                const result = await runA3Voc({ runId, actor: "ceo" });
+                setActionMessage(
+                  `A3 VoC completed (${result.snippetCount} snippets, ${result.topThemeCount} top themes).`
+                );
+              } catch (e) {
+                setActionError(e instanceof Error ? e.message : "A3 failed");
+              }
+            }}
+          >
+            Run A3 VoC
+          </button>
           <button className="button" onClick={() => completeRun({ runId, status: "completed", actor: "ceo" })}>
             Mark Completed
           </button>
@@ -157,6 +175,19 @@ export default function RunDetailPage() {
         </div>
         {actionMessage ? <div style={{ marginTop: 10, color: "#0f766e" }}>{actionMessage}</div> : null}
         {actionError ? <div style={{ marginTop: 10, color: "#b42318" }}>{actionError}</div> : null}
+      </section>
+
+      <section className="panel">
+        <h2>VoC snippets</h2>
+        <div className="list">
+          {(detail?.vocSnippets ?? []).map((snippet) => (
+            <article className="item" key={snippet._id}>
+              <strong>{snippet.source}</strong>
+              <div>{snippet.snippet}</div>
+              <div>tags: {snippet.tags.join(", ")}</div>
+            </article>
+          ))}
+        </div>
       </section>
 
       <section className="panel">

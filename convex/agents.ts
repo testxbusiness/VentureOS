@@ -222,3 +222,200 @@ export const runA2MarketSignals = mutation({
     return { stepId: step._id, artifactId };
   }
 });
+
+export const runA3Voc = mutation({
+  args: {
+    runId: v.id("ventureRuns"),
+    actor: v.string()
+  },
+  handler: async (ctx, args) => {
+    const run = await ctx.db.get(args.runId);
+    if (!run) throw new Error("Run not found");
+
+    const a2Step = await ctx.db
+      .query("ventureRunSteps")
+      .withIndex("by_run_step", (q) => q.eq("runId", args.runId).eq("stepKey", "A2_MARKET_SIGNALS"))
+      .first();
+    if (!a2Step || a2Step.status !== "completed") {
+      throw new Error("A2 Market Signals must be completed before running A3");
+    }
+
+    const step = await ctx.db
+      .query("ventureRunSteps")
+      .withIndex("by_run_step", (q) => q.eq("runId", args.runId).eq("stepKey", "A3_VOC"))
+      .first();
+    if (!step) throw new Error("A3 step not found");
+
+    const sources = [
+      "reddit_thread",
+      "youtube_comment",
+      "forum_post",
+      "product_review",
+      "x_reply",
+      "community_chat"
+    ] as const;
+
+    const snippetSeeds = [
+      {
+        snippet: `Sto cercando una soluzione semplice per ${run.niche}, ma perdo tempo a mettere insieme strumenti separati.`,
+        tags: ["pain:fragmented-workflow", "need:simplicity", "job:execution-speed"]
+      },
+      {
+        snippet: `Ho bisogno di risultati visibili in 14 giorni, altrimenti mollo il progetto su ${run.niche}.`,
+        tags: ["pain:slow-results", "desire:quick-wins", "job:validation"]
+      },
+      {
+        snippet: "Le guide sono piene di teoria, ma mi manca una checklist pratica da eseguire ogni giorno.",
+        tags: ["pain:too-much-theory", "need:daily-checklist", "job:actionability"]
+      },
+      {
+        snippet: "Mi blocco quando devo scegliere il canale: SEO, community o short video?",
+        tags: ["pain:channel-confusion", "objection:choice-overload", "job:distribution"]
+      },
+      {
+        snippet: `Se non vedo un esempio reale nello stesso mercato (${run.geo}/${run.language}), faccio fatica a fidarmi.`,
+        tags: ["objection:proof-gap", "need:local-evidence", "job:trust-building"]
+      },
+      {
+        snippet: "Posso investire poco budget, ma voglio capire quale test mi da il segnale migliore.",
+        tags: ["constraint:low-budget", "need:prioritized-tests", "job:risk-reduction"]
+      },
+      {
+        snippet: "Non voglio una strategia completa adesso, mi serve solo il prossimo passo chiaro.",
+        tags: ["desire:clarity", "need:next-best-action", "job:momentum"]
+      },
+      {
+        snippet: "Quando vedo linguaggio troppo tecnico smetto di leggere subito.",
+        tags: ["pain:complex-language", "need:plain-language", "job:fast-comprehension"]
+      },
+      {
+        snippet: "Vorrei un modo per riutilizzare lo stesso insight in contenuti e idea business senza ripartire da zero.",
+        tags: ["need:reuse-insights", "desire:leverage", "job:consistency"]
+      },
+      {
+        snippet: "Mi interessa monetizzare senza dipendere solo da ads o vanity metrics.",
+        tags: ["desire:monetization-clarity", "objection:vanity-metrics", "job:sustainable-growth"]
+      }
+    ] as const;
+
+    const existing = await ctx.db
+      .query("ventureVocSnippets")
+      .withIndex("by_run", (q) => q.eq("runId", args.runId))
+      .collect();
+    for (const item of existing) {
+      await ctx.db.delete(item._id);
+    }
+
+    const now = Date.now();
+    const snippetRecords: Array<{
+      id: string;
+      source: (typeof sources)[number];
+      snippet: string;
+      tags: string[];
+    }> = [];
+    for (const [index, seed] of snippetSeeds.entries()) {
+      const source = sources[index % sources.length];
+      const snippetId = await ctx.db.insert("ventureVocSnippets", {
+        runId: args.runId,
+        source,
+        snippet: seed.snippet,
+        tags: [...seed.tags],
+        url: `https://example.com/${source}/${index + 1}`,
+        createdAt: now
+      });
+
+      snippetRecords.push({
+        id: String(snippetId),
+        source,
+        snippet: seed.snippet,
+        tags: [...seed.tags]
+      });
+    }
+
+    const tagCount = new Map<string, number>();
+    for (const item of snippetRecords) {
+      for (const tag of item.tags) {
+        tagCount.set(tag, (tagCount.get(tag) ?? 0) + 1);
+      }
+    }
+
+    const topThemes = [...tagCount.entries()]
+      .sort((a, b) => b[1] - a[1])
+      .slice(0, 6)
+      .map(([tag, count]) => {
+        const evidenceRefs = snippetRecords
+          .filter((item) => item.tags.includes(tag))
+          .slice(0, 3)
+          .map((item) => `voc_snippet:${item.id}`);
+        return { theme: tag, count, evidenceRefs };
+      });
+
+    const vocOutput = {
+      generatedAt: nowIso(),
+      principles: [
+        "VoC deve riportare linguaggio reale e non inferenze astratte.",
+        "Ogni tema prioritario deve essere ancorato a snippet verificabili.",
+        "I temi devono guidare A4 Trigger Map e A5 Idea Generation."
+      ],
+      dataset: {
+        runContext: {
+          niche: run.niche,
+          geo: run.geo,
+          language: run.language
+        },
+        snippetCount: snippetRecords.length,
+        sources: [...new Set(snippetRecords.map((item) => item.source))]
+      },
+      deliverable: {
+        topThemes,
+        checklist: [
+          "Snippet raccolti con source e tag",
+          "Top temi con conteggio",
+          "Evidenze collegate a ogni tema",
+          "Output pronto per Trigger Map (A4)"
+        ]
+      }
+    };
+
+    const evidenceRefs = snippetRecords.map((item) => `voc_snippet:${item.id}`);
+
+    await ctx.db.patch(step._id, {
+      status: "completed",
+      output: vocOutput,
+      evidenceRefs,
+      startedAt: step.startedAt ?? now,
+      finishedAt: now,
+      updatedAt: now
+    });
+
+    await ctx.db.patch(run._id, {
+      status: "running",
+      currentStep: "A3_VOC",
+      updatedAt: now
+    });
+
+    const artifactId = await ctx.db.insert("ventureArtifacts", {
+      runId: run._id,
+      stepKey: "A3_VOC",
+      artifactType: "voc_themes",
+      format: "json",
+      title: "VoC Dataset & Top Themes (A3)",
+      content: vocOutput,
+      evidenceRefs,
+      version: 1,
+      createdAt: now
+    });
+
+    await ctx.db.insert("ventureAuditLog", {
+      runId: run._id,
+      entityType: "agent",
+      entityId: `A3:${run._id}`,
+      action: "A3_COMPLETED",
+      actor: args.actor,
+      details: { artifactId, snippetCount: snippetRecords.length, topThemeCount: topThemes.length },
+      createdAt: now
+    });
+
+    return { stepId: step._id, artifactId, snippetCount: snippetRecords.length, topThemeCount: topThemes.length };
+  }
+});

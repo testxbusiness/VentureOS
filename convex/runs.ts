@@ -124,16 +124,17 @@ export const getRunDetail = query({
     const run = await ctx.db.get(args.runId);
     if (!run) return null;
 
-    const [steps, approvals, artifacts, scores, risks, socialPack] = await Promise.all([
+    const [steps, approvals, artifacts, scores, risks, socialPack, vocSnippets] = await Promise.all([
       ctx.db.query("ventureRunSteps").withIndex("by_run", (q) => q.eq("runId", args.runId)).collect(),
       ctx.db.query("ventureApprovals").withIndex("by_run", (q) => q.eq("runId", args.runId)).collect(),
       ctx.db.query("ventureArtifacts").withIndex("by_run", (q) => q.eq("runId", args.runId)).collect(),
       ctx.db.query("ventureScores").withIndex("by_run", (q) => q.eq("runId", args.runId)).collect(),
       ctx.db.query("ventureRiskFlags").withIndex("by_run", (q) => q.eq("runId", args.runId)).collect(),
-      ctx.db.query("ventureSocialPacks").withIndex("by_run", (q) => q.eq("runId", args.runId)).first()
+      ctx.db.query("ventureSocialPacks").withIndex("by_run", (q) => q.eq("runId", args.runId)).first(),
+      ctx.db.query("ventureVocSnippets").withIndex("by_run", (q) => q.eq("runId", args.runId)).collect()
     ]);
 
-    return { run, steps, approvals, artifacts, scores, risks, socialPack };
+    return { run, steps, approvals, artifacts, scores, risks, socialPack, vocSnippets };
   }
 });
 
