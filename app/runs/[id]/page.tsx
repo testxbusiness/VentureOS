@@ -22,6 +22,7 @@ export default function RunDetailPage() {
   const runA3Voc = useMutation(api.agents.runA3Voc);
   const runA4TriggerMap = useMutation(api.agents.runA4TriggerMap);
   const runA5IdeaGen = useMutation(api.agents.runA5IdeaGen);
+  const runA6Scoring = useMutation(api.agents.runA6Scoring);
   const requestApproval = useMutation(api.approvals.requestApproval);
   const completeRun = useMutation(api.steps.completeRun);
 
@@ -197,6 +198,23 @@ export default function RunDetailPage() {
             }}
           >
             Run A5 Idea Gen
+          </button>
+          <button
+            className="button"
+            onClick={async () => {
+              setActionError(null);
+              setActionMessage(null);
+              try {
+                const result = await runA6Scoring({ runId, actor: "ceo" });
+                setActionMessage(
+                  `A6 Scoring completed (${result.scoredCount} scores, shortlist ${result.shortlistCount}) and sent to approval.`
+                );
+              } catch (e) {
+                setActionError(e instanceof Error ? e.message : "A6 failed");
+              }
+            }}
+          >
+            Run A6 Scoring
           </button>
           <button className="button" onClick={() => completeRun({ runId, status: "completed", actor: "ceo" })}>
             Mark Completed

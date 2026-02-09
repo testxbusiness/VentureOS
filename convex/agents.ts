@@ -729,3 +729,207 @@ export const runA5IdeaGen = mutation({
     };
   }
 });
+
+export const runA6Scoring = mutation({
+  args: {
+    runId: v.id("ventureRuns"),
+    actor: v.string()
+  },
+  handler: async (ctx, args) => {
+    const run = await ctx.db.get(args.runId);
+    if (!run) throw new Error("Run not found");
+
+    const a5Step = await ctx.db
+      .query("ventureRunSteps")
+      .withIndex("by_run_step", (q) => q.eq("runId", args.runId).eq("stepKey", "A5_IDEA_GEN"))
+      .first();
+    if (!a5Step || a5Step.status !== "completed") {
+      throw new Error("A5 Idea Gen must be completed before running A6");
+    }
+
+    const step = await ctx.db
+      .query("ventureRunSteps")
+      .withIndex("by_run_step", (q) => q.eq("runId", args.runId).eq("stepKey", "A6_SCORING"))
+      .first();
+    if (!step) throw new Error("A6 step not found");
+    if (step.status === "needs_approval") throw new Error("A6 already waiting approval");
+
+    const ideas = ((a5Step.output as { deliverable?: { ideas?: Array<{ ideaKey: string; type: string; title: string }> } })
+      ?.deliverable?.ideas ?? []) as Array<{ ideaKey: string; type: string; title: string }>;
+    if (ideas.length === 0) {
+      throw new Error("A5 output has no ideas to score");
+    }
+
+    const typeBase: Record<string, number> = {
+      affiliate: 6.8,
+      directory: 7.4,
+      micro_webapp: 7.1
+    };
+    const weights = {
+      demand: 0.35,
+      feasibility: 0.25,
+      distribution: 0.2,
+      monetization: 0.2
+    };
+    const rubricVersion = "m1-v1";
+
+    const existingScores = await ctx.db
+      .query("ventureScores")
+      .withIndex("by_run", (q) => q.eq("runId", args.runId))
+      .collect();
+    for (const score of existingScores) {
+      await ctx.db.delete(score._id);
+    }
+
+    const scoredIdeas: Array<{
+      ideaKey: string;
+      title: string;
+      type: string;
+      dimensions: { demand: number; feasibility: number; distribution: number; monetization: number };
+      overallScore: number;
+      unknowns: string[];
+      scoreId: string;
+    }> = [];
+
+    for (const [index, idea] of ideas.entries()) {
+      const base = typeBase[idea.type] ?? 6.9;
+      const demand = Number((Math.min(9.5, base + ((index % 5) - 2) * 0.18 + 0.6)).toFixed(2));
+      const feasibility = Number((Math.min(9.5, base + ((index % 4) - 1.5) * 0.2 + 0.2)).toFixed(2));
+      const distribution = Number((Math.min(9.5, base + ((index % 3) - 1) * 0.22 + 0.4)).toFixed(2));
+      const monetization = Number((Math.min(9.5, base + ((index % 6) - 2.5) * 0.15 + 0.5)).toFixed(2));
+      const overallScore = Number(
+        (demand * weights.demand +
+          feasibility * weights.feasibility +
+          distribution * weights.distribution +
+          monetization * weights.monetization).toFixed(2)
+      );
+
+      const unknowns =
+        idea.type === "micro_webapp"
+          ? ["activation_friction", "retention_week2"]
+          : idea.type === "directory"
+            ? ["supplier_density", "listing_conversion"]
+            : ["affiliate_epc_stability", "policy_dependency"];
+
+      const scoreId = await ctx.db.insert("ventureScores", {
+        runId: run._id,
+        ideaKey: idea.ideaKey,
+        rubricVersion,
+        dimensions: { demand, feasibility, distribution, monetization },
+        weights,
+        overallScore,
+        unknowns,
+        createdAt: Date.now()
+      });
+
+      scoredIdeas.push({
+        ideaKey: idea.ideaKey,
+        title: idea.title,
+        type: idea.type,
+        dimensions: { demand, feasibility, distribution, monetization },
+        overallScore,
+        unknowns,
+        scoreId: String(scoreId)
+      });
+    }
+
+    const shortlist = [...scoredIdeas]
+      .sort((a, b) => b.overallScore - a.overallScore)
+      .slice(0, 5)
+      .map((item, rank) => ({
+        rank: rank + 1,
+        ideaKey: item.ideaKey,
+        title: item.title,
+        type: item.type,
+        overallScore: item.overallScore,
+        dimensions: item.dimensions,
+        unknowns: item.unknowns,
+        evidenceRefs: [`score:${item.scoreId}`]
+      }));
+
+    const output = {
+      generatedAt: nowIso(),
+      principles: [
+        "Lo scoring combina domanda, fattibilita, distribuzione e monetizzazione.",
+        "La shortlist privilegia idee con score alto e rischi espliciti.",
+        "Gli unknowns guidano i test post-approvazione."
+      ],
+      deliverable: {
+        rubricVersion,
+        weights,
+        scoredCount: scoredIdeas.length,
+        shortlist,
+        checklist: [
+          "Score calcolati per tutte le idee A5",
+          "Top 3-5 idee selezionate",
+          "Unknowns esplicitati per validazione",
+          "Checkpoint shortlist pronto per approvazione"
+        ]
+      }
+    };
+
+    const now = Date.now();
+    const evidenceRefs = shortlist.flatMap((item) => item.evidenceRefs);
+
+    await ctx.db.patch(step._id, {
+      status: "needs_approval",
+      output,
+      evidenceRefs,
+      startedAt: step.startedAt ?? now,
+      finishedAt: now,
+      updatedAt: now
+    });
+
+    await ctx.db.patch(run._id, {
+      status: "awaiting_approval",
+      currentStep: "A6_SCORING",
+      updatedAt: now
+    });
+
+    const artifactId = await ctx.db.insert("ventureArtifacts", {
+      runId: run._id,
+      stepKey: "A6_SCORING",
+      artifactType: "shortlist",
+      format: "json",
+      title: "Scoring & Shortlist (A6)",
+      content: output,
+      evidenceRefs,
+      version: 1,
+      createdAt: now
+    });
+
+    const approvalId = await ctx.db.insert("ventureApprovals", {
+      runId: run._id,
+      stepId: step._id,
+      checkpointType: "SHORTLIST",
+      status: "pending",
+      payload: {
+        summary: "Review shortlist before moving to A7.",
+        artifactId
+      },
+      requestedBy: args.actor,
+      reviewedBy: undefined,
+      decisionNote: undefined,
+      createdAt: now,
+      updatedAt: now
+    });
+
+    await ctx.db.insert("ventureAuditLog", {
+      runId: run._id,
+      entityType: "approval",
+      entityId: approvalId,
+      action: "APPROVAL_REQUESTED",
+      actor: args.actor,
+      details: { checkpointType: "SHORTLIST", stepKey: "A6_SCORING", artifactId, scoredCount: scoredIdeas.length },
+      createdAt: now
+    });
+
+    return {
+      stepId: step._id,
+      artifactId,
+      approvalId,
+      scoredCount: scoredIdeas.length,
+      shortlistCount: shortlist.length
+    };
+  }
+});
