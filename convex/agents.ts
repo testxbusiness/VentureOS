@@ -967,31 +967,57 @@ export const runA7PnlKpi = mutation({
       .first();
     if (!step) throw new Error("A7 step not found");
 
-    const shortlist = ((a6Step.output as { deliverable?: { shortlist?: Array<{ ideaKey: string; title: string; type: string }> } })
-      ?.deliverable?.shortlist ?? []) as Array<{ ideaKey: string; title: string; type: string }>;
+    const shortlist = ((
+      a6Step.output as {
+        deliverable?: { shortlist?: Array<{ ideaKey: string; title: string; type: string; overallScore: number; unknowns: string[] }> };
+      }
+    )?.deliverable?.shortlist ?? []) as Array<{
+      ideaKey: string;
+      title: string;
+      type: string;
+      overallScore: number;
+      unknowns: string[];
+    }>;
     if (shortlist.length === 0) {
       throw new Error("A6 output has no shortlist for PnL/KPI");
     }
 
     const selected = shortlist[0];
-    const base = {
-      monthlyRevenue: 4200,
-      monthlyCosts: 1450,
-      grossMarginPct: 65.48,
-      paybackMonths: 1.8
-    };
-    const conservative = {
-      monthlyRevenue: Math.round(base.monthlyRevenue * 0.65),
-      monthlyCosts: Math.round(base.monthlyCosts * 0.9),
-      grossMarginPct: 54.2,
-      paybackMonths: 3.1
-    };
-    const optimistic = {
-      monthlyRevenue: Math.round(base.monthlyRevenue * 1.45),
-      monthlyCosts: Math.round(base.monthlyCosts * 1.15),
-      grossMarginPct: 71.3,
-      paybackMonths: 1.2
-    };
+    const scenariosByIdea = shortlist.map((idea, index) => {
+      const scoreFactor = Math.max(0.65, Math.min(1.25, (idea.overallScore || 7) / 7.5));
+      const typeMultiplier =
+        idea.type === "directory" ? 1.08 : idea.type === "micro_webapp" ? 1.12 : 0.96;
+      const revenueBase = Math.round((3600 + index * 180) * scoreFactor * typeMultiplier);
+      const costBase = Math.round((1200 + index * 90) * (0.9 + (2 - Math.min(index, 2)) * 0.05));
+
+      const base = {
+        monthlyRevenue: revenueBase,
+        monthlyCosts: costBase,
+        grossMarginPct: Number((((revenueBase - costBase) / revenueBase) * 100).toFixed(2)),
+        paybackMonths: Number((Math.max(1.1, costBase / Math.max(revenueBase - costBase, 1))).toFixed(2))
+      };
+      const conservative = {
+        monthlyRevenue: Math.round(base.monthlyRevenue * 0.65),
+        monthlyCosts: Math.round(base.monthlyCosts * 0.9),
+        grossMarginPct: Number((base.grossMarginPct - 10).toFixed(2)),
+        paybackMonths: Number((base.paybackMonths * 1.7).toFixed(2))
+      };
+      const optimistic = {
+        monthlyRevenue: Math.round(base.monthlyRevenue * 1.45),
+        monthlyCosts: Math.round(base.monthlyCosts * 1.15),
+        grossMarginPct: Number((Math.min(90, base.grossMarginPct + 7)).toFixed(2)),
+        paybackMonths: Number((Math.max(0.9, base.paybackMonths * 0.7)).toFixed(2))
+      };
+
+      return {
+        ideaKey: idea.ideaKey,
+        title: idea.title,
+        type: idea.type,
+        overallScore: idea.overallScore,
+        unknowns: idea.unknowns ?? [],
+        scenarios: { conservative, base, optimistic }
+      };
+    });
 
     const output = {
       generatedAt: nowIso(),
@@ -1002,11 +1028,8 @@ export const runA7PnlKpi = mutation({
       ],
       deliverable: {
         selectedIdea: selected,
-        scenarios: {
-          conservative,
-          base,
-          optimistic
-        },
+        scenariosByIdea,
+        scenarios: scenariosByIdea[0]?.scenarios,
         kpis: {
           northStar: "qualified_sessions_to_revenue_rate",
           leadingIndicators: [
@@ -1023,7 +1046,7 @@ export const runA7PnlKpi = mutation({
           "Pricing iniziale allineato al tipo di offerta shortlist."
         ],
         checklist: [
-          "Scenario base/conservativo/ottimistico disponibili",
+          "Scenari base/conservativo/ottimistico disponibili per ogni top idea",
           "KPI north star + leading definiti",
           "Assunzioni economiche esplicitate",
           "Input pronto per risk memo/go-no-go (A8)"
