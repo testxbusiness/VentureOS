@@ -869,7 +869,8 @@ export const runA6Scoring = mutation({
     };
 
     const now = Date.now();
-    const evidenceRefs = shortlist.flatMap((item) => item.evidenceRefs);
+    const shortlistEvidenceRefs = shortlist.flatMap((item) => item.evidenceRefs);
+    const evidenceRefs = [...new Set([...(a5Step.evidenceRefs ?? []), ...shortlistEvidenceRefs])];
 
     await ctx.db.patch(step._id, {
       status: "needs_approval",

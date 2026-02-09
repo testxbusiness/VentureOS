@@ -24,6 +24,7 @@ export default function RunDetailPage() {
   const runA5IdeaGen = useMutation(api.agents.runA5IdeaGen);
   const runA6Scoring = useMutation(api.agents.runA6Scoring);
   const runA7PnlKpi = useMutation(api.agents.runA7PnlKpi);
+  const exportRunArtifacts = useMutation(api.artifacts.exportRunArtifacts);
   const requestApproval = useMutation(api.approvals.requestApproval);
   const completeRun = useMutation(api.steps.completeRun);
 
@@ -231,6 +232,21 @@ export default function RunDetailPage() {
             }}
           >
             Run A7 PnL/KPI
+          </button>
+          <button
+            className="button"
+            onClick={async () => {
+              setActionError(null);
+              setActionMessage(null);
+              try {
+                const result = await exportRunArtifacts({ runId, actor: "ceo" });
+                setActionMessage(`Artifacts exported (${result.sourceCount} JSON -> ${result.exportCount} MD/CSV artifacts).`);
+              } catch (e) {
+                setActionError(e instanceof Error ? e.message : "Export failed");
+              }
+            }}
+          >
+            Export A1-A6 (MD/CSV)
           </button>
           <button className="button" onClick={() => completeRun({ runId, status: "completed", actor: "ceo" })}>
             Mark Completed
