@@ -933,3 +933,143 @@ export const runA6Scoring = mutation({
     };
   }
 });
+
+export const runA7PnlKpi = mutation({
+  args: {
+    runId: v.id("ventureRuns"),
+    actor: v.string()
+  },
+  handler: async (ctx, args) => {
+    const run = await ctx.db.get(args.runId);
+    if (!run) throw new Error("Run not found");
+
+    const approvedShortlist = await ctx.db
+      .query("ventureApprovals")
+      .withIndex("by_run", (q) => q.eq("runId", args.runId))
+      .filter((q) => q.and(q.eq(q.field("checkpointType"), "SHORTLIST"), q.eq(q.field("status"), "approved")))
+      .first();
+    if (!approvedShortlist) {
+      throw new Error("Shortlist approval required before running A7");
+    }
+
+    const a6Step = await ctx.db
+      .query("ventureRunSteps")
+      .withIndex("by_run_step", (q) => q.eq("runId", args.runId).eq("stepKey", "A6_SCORING"))
+      .first();
+    if (!a6Step || a6Step.status !== "completed") {
+      throw new Error("A6 Scoring must be completed before running A7");
+    }
+
+    const step = await ctx.db
+      .query("ventureRunSteps")
+      .withIndex("by_run_step", (q) => q.eq("runId", args.runId).eq("stepKey", "A7_PNL_KPI"))
+      .first();
+    if (!step) throw new Error("A7 step not found");
+
+    const shortlist = ((a6Step.output as { deliverable?: { shortlist?: Array<{ ideaKey: string; title: string; type: string }> } })
+      ?.deliverable?.shortlist ?? []) as Array<{ ideaKey: string; title: string; type: string }>;
+    if (shortlist.length === 0) {
+      throw new Error("A6 output has no shortlist for PnL/KPI");
+    }
+
+    const selected = shortlist[0];
+    const base = {
+      monthlyRevenue: 4200,
+      monthlyCosts: 1450,
+      grossMarginPct: 65.48,
+      paybackMonths: 1.8
+    };
+    const conservative = {
+      monthlyRevenue: Math.round(base.monthlyRevenue * 0.65),
+      monthlyCosts: Math.round(base.monthlyCosts * 0.9),
+      grossMarginPct: 54.2,
+      paybackMonths: 3.1
+    };
+    const optimistic = {
+      monthlyRevenue: Math.round(base.monthlyRevenue * 1.45),
+      monthlyCosts: Math.round(base.monthlyCosts * 1.15),
+      grossMarginPct: 71.3,
+      paybackMonths: 1.2
+    };
+
+    const output = {
+      generatedAt: nowIso(),
+      principles: [
+        "PnL-lite deve essere utile a decidere, non a prevedere in modo definitivo.",
+        "KPI leading devono anticipare outcome economici.",
+        "Scenari conservativo/base/ottimistico riducono overconfidence."
+      ],
+      deliverable: {
+        selectedIdea: selected,
+        scenarios: {
+          conservative,
+          base,
+          optimistic
+        },
+        kpis: {
+          northStar: "qualified_sessions_to_revenue_rate",
+          leadingIndicators: [
+            "activation_rate_7d",
+            "first_value_time_hours",
+            "trial_to_paid_rate",
+            "cac_payback_days"
+          ],
+          guardrailIndicators: ["refund_rate", "support_ticket_rate", "content_to_signup_rate"]
+        },
+        assumptions: [
+          "Canali principali: SEO + community + short video.",
+          "Nessuna automazione spesa/publish senza checkpoint.",
+          "Pricing iniziale allineato al tipo di offerta shortlist."
+        ],
+        checklist: [
+          "Scenario base/conservativo/ottimistico disponibili",
+          "KPI north star + leading definiti",
+          "Assunzioni economiche esplicitate",
+          "Input pronto per risk memo/go-no-go (A8)"
+        ]
+      }
+    };
+
+    const now = Date.now();
+    const evidenceRefs = (a6Step.evidenceRefs ?? []).slice(0, 10);
+
+    await ctx.db.patch(step._id, {
+      status: "completed",
+      output,
+      evidenceRefs,
+      startedAt: step.startedAt ?? now,
+      finishedAt: now,
+      updatedAt: now
+    });
+
+    await ctx.db.patch(run._id, {
+      status: "running",
+      currentStep: "A7_PNL_KPI",
+      updatedAt: now
+    });
+
+    const artifactId = await ctx.db.insert("ventureArtifacts", {
+      runId: run._id,
+      stepKey: "A7_PNL_KPI",
+      artifactType: "pnl_kpi",
+      format: "json",
+      title: "PnL-lite & KPI (A7)",
+      content: output,
+      evidenceRefs,
+      version: 1,
+      createdAt: now
+    });
+
+    await ctx.db.insert("ventureAuditLog", {
+      runId: run._id,
+      entityType: "agent",
+      entityId: `A7:${run._id}`,
+      action: "A7_COMPLETED",
+      actor: args.actor,
+      details: { artifactId, selectedIdeaKey: selected.ideaKey },
+      createdAt: now
+    });
+
+    return { stepId: step._id, artifactId, selectedIdeaKey: selected.ideaKey };
+  }
+});

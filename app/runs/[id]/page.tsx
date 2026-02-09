@@ -23,6 +23,7 @@ export default function RunDetailPage() {
   const runA4TriggerMap = useMutation(api.agents.runA4TriggerMap);
   const runA5IdeaGen = useMutation(api.agents.runA5IdeaGen);
   const runA6Scoring = useMutation(api.agents.runA6Scoring);
+  const runA7PnlKpi = useMutation(api.agents.runA7PnlKpi);
   const requestApproval = useMutation(api.approvals.requestApproval);
   const completeRun = useMutation(api.steps.completeRun);
 
@@ -215,6 +216,21 @@ export default function RunDetailPage() {
             }}
           >
             Run A6 Scoring
+          </button>
+          <button
+            className="button"
+            onClick={async () => {
+              setActionError(null);
+              setActionMessage(null);
+              try {
+                const result = await runA7PnlKpi({ runId, actor: "ceo" });
+                setActionMessage(`A7 PnL/KPI completed (selected idea: ${result.selectedIdeaKey}).`);
+              } catch (e) {
+                setActionError(e instanceof Error ? e.message : "A7 failed");
+              }
+            }}
+          >
+            Run A7 PnL/KPI
           </button>
           <button className="button" onClick={() => completeRun({ runId, status: "completed", actor: "ceo" })}>
             Mark Completed
